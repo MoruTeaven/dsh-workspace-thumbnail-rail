@@ -4,46 +4,73 @@ import { injectStyles } from "./styles";
 /**
  * Browser-half plugin body.
  *
- * `shell.overlay` is chosen deliberately (slots.ts:37-39): it is a LIST slot,
- * so this entry is ADDED beside the shipped ones instead of shadowing any of
- * them, and it stays alive for the whole frame. `sidebar` and `conversation`
- * are single slots where a second entry wins by priority and would delete the
- * shipped surface.
+ * `sidebar.workspaces` is the Host's workspace/session browsing region
+ * (ui-sidebar/src/client/contract/slots.ts:24): the section header, the search
+ * box, the grouped session tree and every workspace dialog. Taking that seat
+ * REPLACES the Host's own browser with the two-column explorer this plugin
+ * ships — a workspace thumbnail column on the left, that workspace's sessions
+ * on the right.
  *
- * The rail's geometry is handled by `frame.ts`: this registration only supplies
- * the React host (and with it `useWorkspaces` / `useSessions`) and the two Host
- * actions the menu needs.
+ * The alternative seats were rejected for concrete reasons:
+ * - `sidebar` and `conversation` are single slots where a second entry wins by
+ *   priority and deletes the shipped surface (runtime/slots.ts:33-39).
+ * - `shell.overlay` is additive but its layer paints above the whole frame at
+ *   `z-index: 20` (AppFrame.module.css:110-119), so it cannot host a column
+ *   that participates in the layout; that was the previous, wrong approach.
+ *
+ * All navigation is delegated to the Host through the injected face below, so
+ * this plugin never mutates session or workspace state directly.
  */
 
 /** Services this plugin waits for before registering. */
-const inject = ["slots", "workspaces"];
+const inject = ["slots", "workspaces", "sessions"];
 
-/** The list slot this plugin contributes to. */
-const SLOT_KEY = "shell.overlay";
+/** The slot this plugin contributes to. */
+const SLOT_KEY = "sidebar.workspaces";
 
-/** This plugin's entry id inside that list slot. */
+/** This plugin's entry id — the Host's own browser registers under another. */
 const ENTRY_ID = "workspace-thumbnail-rail";
 
+/** The Host faces this plugin drives, kept as a narrow local shape. */
+interface WorkspaceFace {
+  connectWorkspace(workspaceId: string): Promise<string>;
+  delete(workspaceId: string): Promise<void>;
+  archiveSession(sessionId: string): Promise<void>;
+}
+
+interface SessionFace {
+  open(sessionId: string): void;
+}
+
 function apply(ctx: any) {
-  const workspaces = ctx.workspaces as {
-    connectWorkspace(id: string): Promise<string>;
-    delete(id: string): Promise<void>;
-  };
+  const workspaces = ctx.workspaces as WorkspaceFace;
+  const sessions = ctx.sessions as SessionFace;
 
   const actions: RailActions = {
+    openSession: (sessionId) => sessions.open(sessionId),
+
     // The Host resolves the workspace's blank session (reusing an existing one)
-    // and this call opens it; navigation therefore stays Host-owned.
+    // and this call opens it, so navigation semantics stay Host-owned.
     startWorkspace: (workspaceId) => {
       workspaces
         .connectWorkspace(workspaceId)
-        .then((sessionId: string) => {
-          (ctx.sessions as { open(id: string): void }).open(sessionId);
-        })
+        .then((sessionId) => sessions.open(sessionId))
         .catch(() => {
-          /* the workspace list itself reports Host failures; stay quiet here */
+          /* the workspace column itself stays usable; the Host logs the reason */
         });
     },
+
+    newSessionIn: (workspaceId) => {
+      workspaces
+        .connectWorkspace(workspaceId)
+        .then((sessionId) => sessions.open(sessionId))
+        .catch(() => {
+          /* same as startWorkspace */
+        });
+    },
+
     removeWorkspace: (workspaceId) => workspaces.delete(workspaceId),
+    archiveSession: (sessionId) => workspaces.archiveSession(sessionId),
   };
 
   ctx.slots.inject(SLOT_KEY, () => {

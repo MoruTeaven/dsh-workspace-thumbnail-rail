@@ -85,43 +85,19 @@ export function loadPrefs(): RailPreferences {
   const width = typeof raw.width === "number" && Number.isFinite(raw.width)
     ? Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, Math.round(raw.width)))
     : DEFAULT_PREFS.width;
-  return { width, enabled: typeof raw.enabled === "boolean" ? raw.enabled : DEFAULT_PREFS.enabled };
+  const prefs: RailPreferences = {
+    width,
+    enabled: typeof raw.enabled === "boolean" ? raw.enabled : DEFAULT_PREFS.enabled,
+  };
+  // A selection is only useful while it still names a workspace, but that is
+  // re-checked on read (resolveSelectedWorkspace), so persist it verbatim here.
+  if (typeof raw.selectedWorkspaceId === "string") {
+    prefs.selectedWorkspaceId = raw.selectedWorkspaceId;
+  }
+  return prefs;
 }
 
 /** Persist rail preferences. @returns whether it landed. */
 export function savePrefs(prefs: RailPreferences): boolean {
   return writeJson(PREFS_KEY, prefs);
-}
-
-/** Remove one workspace's thumbnail. @returns whether it landed. */
-export function removeThumbnail(workspaceId: string): boolean {
-  const map = loadThumbnails();
-  delete map[workspaceId];
-  return saveThumbnails(map);
-}
-
-/**
- * Subscribe to cross-page thumbnail changes.
- *
- * The `storage` event does not fire in the writing page, so this callback only
- * ever reports OTHER pages' edits — no de-duplication needed.
- * @returns an unsubscribe function.
- */
-export function onThumbnailsChanged(handler: () => void): () => void {
-  if (typeof window === "undefined") return () => {};
-  const listener = (event: StorageEvent) => {
-    if (event.key === null || event.key === THUMBNAIL_KEY) handler();
-  };
-  window.addEventListener("storage", listener);
-  return () => window.removeEventListener("storage", listener);
-}
-
-/** Subscribe to cross-page preference changes. @returns an unsubscribe function. */
-export function onPrefsChanged(handler: () => void): () => void {
-  if (typeof window === "undefined") return () => {};
-  const listener = (event: StorageEvent) => {
-    if (event.key === null || event.key === PREFS_KEY) handler();
-  };
-  window.addEventListener("storage", listener);
-  return () => window.removeEventListener("storage", listener);
 }

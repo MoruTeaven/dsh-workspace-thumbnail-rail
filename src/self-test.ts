@@ -1,9 +1,10 @@
 /**
- * Self-test for the pure logic of the rail.
+ * Self-test for the pure logic of the workspace browser.
  *
- * The DOM-facing halves (canvas compression, frame patching) cannot run under
- * node, so this covers what can: the storage validators and the rail's
- * geometry maths. It runs through `pnpm test` after an esbuild bundle.
+ * The DOM-facing halves (canvas compression, React rendering) cannot run under
+ * node, so this covers what can: the storage validators, the session projection
+ * and the workspace-selection rules. It runs through `pnpm test` after an
+ * esbuild bundle.
  */
 
 import { strict as assert } from "node:assert";
@@ -20,7 +21,9 @@ const store = new Map<string, string>();
 } as unknown as Storage;
 
 const { DEFAULT_PREFS, loadPrefs, loadThumbnails, savePrefs, saveThumbnails } = await import("./storage.js");
-const { widenFirst } = await import("./frame.js");
+const { resolveSelectedWorkspace, sessionsOfWorkspace } = await import("./sessions.js");
+type SessionList = import("./types.js").SessionListState;
+type Workspace = import("./types.js").WorkspaceView;
 
 let passed = 0;
 function check(name: string, fn: () => void): void {
@@ -88,37 +91,105 @@ check("falls back on a non-numeric width", () => {
   assert.deepEqual(loadPrefs(), { width: 72, enabled: true });
 });
 
-console.log("frame geometry");
+console.log("session projection");
 
-check("widens the FIRST track so the rail is the leftmost column", () => {
-  assert.deepEqual(widenFirst([280, 1000], 72, 0), [352, 1000]);
+const ws = (workspaceId: string, sessionIds: string[]): Workspace => ({
+  workspaceId,
+  path: `C:/tmp/${workspaceId}`,
+  title: workspaceId,
+  sessionIds,
+  createdAt: "2026-01-01T00:00:00.000Z",
+  updatedAt: "2026-01-01T00:00:00.000Z",
 });
 
-check("leaves every track after the first untouched", () => {
-  const [first, center, details] = widenFirst([280, 1000, 360], 72, 0);
-  assert.equal(first, 352);
-  assert.equal(center, 1000);
-  assert.equal(details, 360);
+const session = (id: string, updatedAt: number, blank = false): SessionList["byId"][string] => ({
+  id,
+  displayTitle: id,
+  updatedAt,
+  running: false,
+  blank,
 });
 
-check("is idempotent across repeated observer runs", () => {
-  // First call adds 72 to the first track; the observer then sees 352 and must
-  // not add another 72 because it subtracts the previous contribution first.
-  const once = widenFirst([280, 1000], 72, 0);
-  const twice = widenFirst(once, 72, 72);
-  assert.deepEqual(twice, once);
+/** A session list snapshot with an explicitly optional current session. */
+const list = (
+  byId: SessionList["byId"],
+  current?: string,
+): SessionList => ({ ids: Object.keys(byId), byId, current });
+
+check("lists only the selected workspace's sessions, newest first", () => {
+  const rows = sessionsOfWorkspace(
+    ws("a", ["s1", "s2"]),
+    list({ s1: session("s1", 100), s2: session("s2", 200) }),
+    { archived: [], current: undefined },
+  );
+  assert.deepEqual(rows.map((r) => r.id), ["s2", "s1"]);
 });
 
-check("never shrinks the first track below zero", () => {
-  assert.deepEqual(widenFirst([30, 1000], 72, 0), [102, 1000]);
+check("never shows another workspace's sessions", () => {
+  const rows = sessionsOfWorkspace(
+    ws("a", ["s1"]),
+    list({ s1: session("s1", 100), s2: session("s2", 200) }),
+    { archived: [], current: undefined },
+  );
+  assert.deepEqual(rows.map((r) => r.id), ["s1"]);
 });
 
-check("returns the input untouched when the rail is hidden", () => {
-  assert.deepEqual(widenFirst([280, 1000, 360], 0, 0), [280, 1000, 360]);
+check("hides archived sessions", () => {
+  const rows = sessionsOfWorkspace(
+    ws("a", ["s1", "s2"]),
+    list({ s1: session("s1", 100), s2: session("s2", 200) }),
+    { archived: ["s2"], current: undefined },
+  );
+  assert.deepEqual(rows.map((r) => r.id), ["s1"]);
 });
 
-check("returns the input untouched with too few tracks", () => {
-  assert.deepEqual(widenFirst([280], 72, 0), [280]);
+check("hides blank sessions except the open one", () => {
+  const blanks = { b1: session("b1", 100, true), b2: session("b2", 200, true) };
+  assert.deepEqual(
+    sessionsOfWorkspace(ws("a", ["b1", "b2"]), list(blanks), { archived: [], current: undefined }),
+    [],
+    "a blank row that is not open would do nothing when clicked",
+  );
+  assert.deepEqual(
+    sessionsOfWorkspace(ws("a", ["b1", "b2"]), list(blanks, "b1"), { archived: [], current: "b1" })
+      .map((r) => r.id),
+    ["b1"],
+  );
+});
+
+check("skips session ids the list has not seen yet", () => {
+  const rows = sessionsOfWorkspace(
+    ws("a", ["s1", "ghost"]),
+    list({ s1: session("s1", 100) }),
+    { archived: [], current: undefined },
+  );
+  assert.deepEqual(rows.map((r) => r.id), ["s1"]);
+});
+
+console.log("workspace selection");
+
+check("a remembered selection wins", () => {
+  const list = [ws("a", ["s1"]), ws("b", ["s2"])];
+  assert.equal(resolveSelectedWorkspace(list, "b", "s1"), "b");
+});
+
+check("falls back to the workspace owning the current session", () => {
+  const list = [ws("a", ["s1"]), ws("b", ["s2"])];
+  assert.equal(resolveSelectedWorkspace(list, undefined, "s2"), "b");
+});
+
+check("falls back to the first workspace", () => {
+  const list = [ws("a", ["s1"]), ws("b", ["s2"])];
+  assert.equal(resolveSelectedWorkspace(list, undefined, undefined), "a");
+});
+
+check("ignores a remembered selection that no longer exists", () => {
+  const list = [ws("a", ["s1"]), ws("b", ["s2"])];
+  assert.equal(resolveSelectedWorkspace(list, "gone", "s2"), "b");
+});
+
+check("returns undefined when there are no workspaces", () => {
+  assert.equal(resolveSelectedWorkspace([], "a", undefined), undefined);
 });
 
 console.log(`\n${passed} checks passed`);

@@ -31,8 +31,7 @@
     "prepare": "node esbuild.config.mjs",
     "typecheck": "tsc --noEmit",
     "test:unit": "esbuild src/self-test.ts --bundle --format=esm --platform=node --outfile=lib/self-test.mjs && node lib/self-test.mjs",
-    "test:frame": "esbuild src/frame-test.ts --bundle --format=esm --platform=node --outfile=lib/frame-test.mjs && node lib/frame-test.mjs",
-    "test": "pnpm run typecheck && pnpm run test:unit && pnpm run test:frame"
+    "test": "pnpm run typecheck && pnpm run test:unit"
   },
   "files": [
     "lib/client.js",

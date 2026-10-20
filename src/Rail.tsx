@@ -1,76 +1,96 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ColumnsIcon, FolderIcon, ImageIcon, ImageOffIcon, TrashIcon } from "./icons";
+import { FolderIcon, ImageIcon, ImageOffIcon, TrashIcon } from "./icons";
 import { ThumbnailError, makeThumbnail } from "./image";
-import { installRail, type FramePatch } from "./frame";
+import { resolveSelectedWorkspace, sessionsOfWorkspace } from "./sessions";
 import { loadPrefs, loadThumbnails, savePrefs, saveThumbnails } from "./storage";
-import type { SessionListState, ThumbnailMap, WorkspaceListState, WorkspaceView } from "./types";
+import type {
+  RailPreferences,
+  SessionListState,
+  ThumbnailMap,
+  WorkspaceListState,
+  WorkspaceView,
+} from "./types";
 
 /**
- * The thumbnail rail: one vertical cell per workspace, drawn in the column the
- * plugin carves out of the host frame.
+ * The sidebar browser: a workspace column on the left and that workspace's
+ * sessions on the right, in the shape VS Code uses for its explorer.
  *
- * State comes from the framework's standard props (`useWorkspaces` /
- * `useSessions`, runtime/src/client/index.ts:146-150) and from the register
- * `inject` face, so the rail never owns a subscription or reaches for a
- * global — the host re-renders it exactly when the workspace baseline or the
- * current session changes, and the navigation actions arrive as props.
+ * This plugin takes over the `sidebar.workspaces` seat, so the Host's own
+ * workspace browser is replaced wholesale (the seat is single-kind; a second
+ * entry would shadow it anyway — see slots.ts:33-39). Everything below is
+ * therefore rendered from the framework's standard hooks and the register
+ * `inject` face, never by reaching into the Host's DOM.
  */
 
-/** Actions the plugin body injects into the rail component. */
+/** Actions the plugin body injects into this component. */
 export interface RailActions {
+  /** Open a session by id. */
+  openSession: (sessionId: string) => void;
   /** Connect a workspace's blank session and navigate to it. */
   startWorkspace: (workspaceId: string) => void;
+  /** Start a new session inside a workspace. */
+  newSessionIn: (workspaceId: string) => void;
   /** Unregister a workspace (directory, files and session logs stay). */
   removeWorkspace: (workspaceId: string) => Promise<void>;
+  /** Archive a session so it leaves every list. */
+  archiveSession: (sessionId: string) => Promise<void>;
+}
+
+/** Owner props the sidebar passes to this seat (contract/slots.ts:43-48). */
+export interface RailOwnerProps {
+  /** Shell fold state: wide renders the full browser, rail the icon column. */
+  wide: boolean;
+  /** Rail icons request expansion; the browser rides the wide flip for focus. */
+  expandSidebar: () => void;
 }
 
 /** Props the framework injects into every global (root-scoped) slot component. */
-export interface RailProps extends RailActions {
+export interface RailProps extends RailActions, RailOwnerProps {
   useWorkspaces: <T,>(selector: (state: WorkspaceListState) => T) => T;
   useSessions: <T,>(selector: (state: SessionListState) => T) => T;
 }
 
 /** Rail column geometry bounds, matching the storage clamp. */
-const MIN_RAIL_WIDTH = 48;
-const MAX_RAIL_WIDTH = 160;
+const MIN_RAIL_WIDTH = 56;
+const MAX_RAIL_WIDTH = 120;
 
 /** Milliseconds a transient message stays on screen. */
 const TOAST_MS = 2600;
 
-/**
- * Resolve which workspace owns the current session.
- *
- * The browser half has no session→workspace service; scanning the workspace
- * list is the shipped precedent
- * (runtime/src/client/workspaces/service.ts:180-182).
- */
-function workspaceOfSession(
-  workspaces: readonly WorkspaceView[],
-  sessionId: string | undefined,
-): string | undefined {
-  if (sessionId === undefined) return undefined;
-  return workspaces.find((item) => item.sessionIds.includes(sessionId))?.workspaceId;
+/** An open context menu, anchored in viewport coordinates. */
+interface MenuState {
+  workspaceId: string;
+  x: number;
+  y: number;
 }
 
-/** The rail root. */
+/** The browser root. */
 export function Rail({
+  wide,
+  expandSidebar,
   useWorkspaces,
   useSessions,
+  openSession,
   startWorkspace,
+  newSessionIn,
   removeWorkspace,
+  archiveSession,
 }: RailProps) {
   const workspaces = useWorkspaces((state) => state.items);
-  const currentSessionId = useSessions((state) => state.current);
+  const archived = useWorkspaces((state) => state.archivedSessionIds);
+  const sessions = useSessions((state) => ({
+    ids: state.ids,
+    byId: state.byId,
+    current: state.current,
+  }));
 
   const [thumbnails, setThumbnails] = useState<ThumbnailMap>(() => loadThumbnails());
-  const [prefs, setPrefs] = useState(() => loadPrefs());
+  const [prefs, setPrefs] = useState<RailPreferences>(() => loadPrefs());
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
-  const rootRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const pendingPickRef = useRef<string | null>(null);
-  const patchRef = useRef<FramePatch | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   // Cross-page sync. The storage event fires in every page EXCEPT the writer,
@@ -88,33 +108,46 @@ export function Rail({
     return () => window.removeEventListener("storage", onStorage);
   }, []);
 
-  // Carve the column out of the host frame, and hand it back on unmount.
-  const railWidth = prefs.enabled ? prefs.width : 0;
-  useEffect(() => {
-    const element = rootRef.current;
-    if (element === null) return;
-    patchRef.current?.restore();
-    patchRef.current = installRail(element, railWidth);
-    return () => {
-      patchRef.current?.restore();
-      patchRef.current = null;
-    };
-  }, [railWidth]);
+  useEffect(() => () => {
+    if (toastTimer.current !== undefined) clearTimeout(toastTimer.current);
+  }, []);
 
-  const activeId = useMemo(
-    () => workspaceOfSession(workspaces, currentSessionId),
-    [workspaces, currentSessionId],
+  /**
+   * The workspace whose sessions are listed: a remembered selection, else the
+   * one owning the current session, else the first.
+   */
+  const selectedId = useMemo(
+    () => resolveSelectedWorkspace(workspaces, prefs.selectedWorkspaceId, sessions.current),
+    [workspaces, prefs.selectedWorkspaceId, sessions.current],
   );
+
+  const selected = useMemo(
+    () => workspaces.find((item) => item.workspaceId === selectedId),
+    [workspaces, selectedId],
+  );
+
+  const rows = useMemo(
+    () => (selected === undefined
+      ? []
+      : sessionsOfWorkspace(selected, sessions, { archived, current: sessions.current })),
+    [selected, sessions, archived],
+  );
+
+  /** Remember the selected workspace and open its conversation. */
+  const select = useCallback((workspaceId: string) => {
+    setPrefs((current) => {
+      const next = { ...current, selectedWorkspaceId: workspaceId };
+      savePrefs(next);
+      return next;
+    });
+    startWorkspace(workspaceId);
+  }, [startWorkspace]);
 
   /** Show a transient message, replacing any in flight. */
   const notify = useCallback((message: string) => {
     setToast(message);
     if (toastTimer.current !== undefined) clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(null), TOAST_MS);
-  }, []);
-
-  useEffect(() => () => {
-    if (toastTimer.current !== undefined) clearTimeout(toastTimer.current);
   }, []);
 
   /** Open the OS file picker for one workspace. */
@@ -155,16 +188,7 @@ export function Rail({
     setThumbnails(next);
   }, []);
 
-  /** Toggle the rail on or off, persisting the preference. */
-  const toggleRail = useCallback(() => {
-    setPrefs((current) => {
-      const next = { ...current, enabled: !current.enabled };
-      savePrefs(next);
-      return next;
-    });
-  }, []);
-
-  /** Drag the rail's inner edge to resize the column. */
+  /** Drag the column's inner edge to resize it. */
   const onResize = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     event.preventDefault();
     const startX = event.clientX;
@@ -207,6 +231,12 @@ export function Rail({
 
   const onDeleteWorkspace = useCallback(async (workspaceId: string) => {
     clearFor(workspaceId);
+    setPrefs((current) => {
+      const next = { ...current };
+      if (next.selectedWorkspaceId === workspaceId) delete next.selectedWorkspaceId;
+      savePrefs(next);
+      return next;
+    });
     try {
       await removeWorkspace(workspaceId);
     } catch {
@@ -214,8 +244,9 @@ export function Rail({
     }
   }, [clearFor, notify]);
 
-  return (
-    <div ref={rootRef} className="dsh-wsr-rail" data-plugin="dsh-workspace-thumbnail-rail">
+  // The shared hidden file input and the context menu render in both modes.
+  const chrome = (
+    <>
       <input
         ref={fileInputRef}
         type="file"
@@ -223,85 +254,148 @@ export function Rail({
         style={{ display: "none" }}
         onChange={onFileChosen}
       />
-
-      {workspaces.map((workspace) => {
-        const thumb = thumbnails[workspace.workspaceId];
-        const isActive = workspace.workspaceId === activeId;
-        return (
-          <div className="dsh-wsr-cell-wrap" key={workspace.workspaceId}>
-            <button
-              type="button"
-              className={`dsh-wsr-cell${isActive ? " dsh-wsr-cell--active" : ""}`}
-              title={workspace.title}
-              aria-label={workspace.title}
-              aria-current={isActive || undefined}
-              onClick={() => startWorkspace(workspace.workspaceId)}
-              onContextMenu={(e) => {
-                e.preventDefault();
-                const rect = e.currentTarget.getBoundingClientRect();
-                setMenu({ workspaceId: workspace.workspaceId, x: rect.right + 4, y: rect.top });
-              }}
-            >
-              {thumb === undefined
-                ? <FolderIcon size={18} />
-                : <img className="dsh-wsr-cell__img" src={thumb.src} alt="" draggable={false} />}
-            </button>
-            <span className="dsh-wsr-cell__label">{workspace.title}</span>
-          </div>
-        );
-      })}
-
-      {prefs.enabled && workspaces.length > 0 && (
-        <div
-          className="dsh-wsr-resize"
-          onPointerDown={onResize}
-          role="separator"
-          aria-label="调整缩略图栏宽度"
-        />
-      )}
-
       {menu !== null && (
         <Menu
           menu={menu}
           hasThumbnail={thumbnails[menu.workspaceId] !== undefined}
-          railVisible={prefs.enabled}
           onClose={() => setMenu(null)}
           onSet={() => { setMenu(null); pickFor(menu.workspaceId); }}
           onClear={() => { clearFor(menu.workspaceId); setMenu(null); }}
           onDelete={() => { setMenu(null); void onDeleteWorkspace(menu.workspaceId); }}
-          onToggleRail={() => { setMenu(null); toggleRail(); }}
         />
       )}
-
       {toast !== null && <div className="dsh-wsr-toast">{toast}</div>}
+    </>
+  );
+
+  /** One thumbnail tile, shared by both sidebar widths. */
+  const tile = (workspace: WorkspaceView, inColumn: boolean) => {
+    const thumb = thumbnails[workspace.workspaceId];
+    const isActive = workspace.workspaceId === selectedId;
+    const busy = workspace.sessionIds.some((id) => sessions.byId[id]?.running);
+    return (
+      <button
+        type="button"
+        className={`dsh-wsr-tile${isActive ? " dsh-wsr-tile--active" : ""}`}
+        title={workspace.title}
+        aria-label={workspace.title}
+        aria-current={inColumn && isActive ? true : undefined}
+        onClick={() => {
+          if (!wide) expandSidebar();
+          select(workspace.workspaceId);
+        }}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          const rect = e.currentTarget.getBoundingClientRect();
+          setMenu({
+            workspaceId: workspace.workspaceId,
+            x: rect.right + 6,
+            y: rect.top,
+          });
+        }}
+      >
+        {thumb === undefined
+          ? <FolderIcon size={18} />
+          : <img className="dsh-wsr-tile__img" src={thumb.src} alt="" draggable={false} />}
+        {busy && <span className="dsh-wsr-tile__busy" aria-label="有正在运行的会话" />}
+      </button>
+    );
+  };
+
+  if (!wide) {
+    // Collapsed sidebar: the same thumbnails as an icon column, the affordance
+    // the Host's own browser gives its session list.
+    return (
+      <div className="dsh-wsr-browser dsh-wsr-browser--rail">
+        {chrome}
+        <div className="dsh-wsr-browser__rail-scroll">
+          {workspaces.map((workspace) => tile(workspace, false))}
+        </div>
+      </div>
+    );
+  }
+
+  const columnWidth = prefs.enabled ? prefs.width : 0;
+
+  return (
+    <div className="dsh-wsr-browser">
+      {chrome}
+
+      {columnWidth > 0 && (
+        <div className="dsh-wsr-column" style={{ width: columnWidth }}>
+          <div className="dsh-wsr-column__scroll">
+            {workspaces.map((workspace) => (
+              <div className="dsh-wsr-tile-wrap" key={workspace.workspaceId}>
+                {tile(workspace, true)}
+                <span className="dsh-wsr-tile__label">{workspace.title}</span>
+              </div>
+            ))}
+          </div>
+          {workspaces.length > 0 && (
+            <div
+              className="dsh-wsr-resize"
+              onPointerDown={onResize}
+              role="separator"
+              aria-label="调整缩略图列宽度"
+            />
+          )}
+        </div>
+      )}
+
+      <div className="dsh-wsr-sessions">
+        <div className="dsh-wsr-sessions__head">
+          <span className="dsh-wsr-sessions__title">{selected?.title ?? "会话"}</span>
+          {selected !== undefined && (
+            <button
+              type="button"
+              className="dsh-wsr-sessions__new"
+              title="在此工作区新建会话"
+              aria-label="在此工作区新建会话"
+              onClick={() => newSessionIn(selected.workspaceId)}
+            >
+              <ImageIcon size={14} />
+            </button>
+          )}
+        </div>
+        <div className="dsh-wsr-sessions__scroll">
+          {rows.length === 0 && <div className="dsh-wsr-sessions__empty">暂无会话</div>}
+          {rows.map((row) => (
+            <button
+              type="button"
+              key={row.id}
+              className={`dsh-wsr-row${row.id === sessions.current ? " dsh-wsr-row--active" : ""}`}
+              title={row.displayTitle}
+              onClick={() => openSession(row.id)}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                void archiveSession(row.id);
+              }}
+            >
+              {row.running && <span className="dsh-wsr-row__dot" aria-label="运行中" />}
+              <span className="dsh-wsr-row__title">{row.displayTitle}</span>
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
   );
-}
-
-/** An open context menu, anchored in viewport coordinates. */
-interface MenuState {
-  workspaceId: string;
-  x: number;
-  y: number;
 }
 
 /** Props the context menu needs. */
 interface MenuProps {
   menu: MenuState;
   hasThumbnail: boolean;
-  railVisible: boolean;
   onClose(): void;
   onSet(): void;
   onClear(): void;
   onDelete(): void;
-  onToggleRail(): void;
 }
 
-/** The right-click menu for one workspace cell. */
+/** The right-click menu for one workspace tile. */
 function Menu(props: MenuProps) {
-  // Keep the menu inside the viewport.
   const x = Math.max(4, Math.min(props.menu.x, window.innerWidth - 166));
-  const y = Math.max(4, Math.min(props.menu.y, window.innerHeight - 196));
+  const y = Math.max(4, Math.min(props.menu.y, window.innerHeight - 120));
   return (
     <div
       className="dsh-wsr-menu"
@@ -318,9 +412,6 @@ function Menu(props: MenuProps) {
         </button>
       )}
       <div className="dsh-wsr-menu__sep" />
-      <button type="button" className="dsh-wsr-menu__item" role="menuitem" onClick={props.onToggleRail}>
-        <ColumnsIcon size={14} /> {props.railVisible ? "隐藏缩略图栏" : "显示缩略图栏"}
-      </button>
       <button
         type="button"
         className="dsh-wsr-menu__item dsh-wsr-menu__item--danger"
