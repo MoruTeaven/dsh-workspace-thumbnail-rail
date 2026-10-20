@@ -16,11 +16,18 @@
  * `useSessions` and real React state) and this module does only the geometric
  * part:
  *
- *   1. add `railWidth` to the frame's first grid track, which pushes the
- *      conversation column right by exactly that much — the host owns the
- *      concession solve, we never recompute its widths;
+ *   1. widen the CENTER track by `railWidth`, which shifts the conversation
+ *      column right by exactly that much — the host owns the concession solve,
+ *      we never recompute its widths;
  *   2. position the rail absolutely at `sidebarWidth .. sidebarWidth+railWidth`,
- *      i.e. inside the space we just carved out.
+ *      i.e. in the space that widening the center just opened up.
+ *
+ * The widening deliberately lands on the center track, NOT on the sidebar
+ * track: the sidebar's drag handle is absolutely positioned at the sidebar's
+ * own pixel boundary (AppFrame.tsx:197 writes `left: cols.sidebar`), so
+ * growing the sidebar track would leave that handle stranded mid-column and
+ * every sidebar drag would jump. Growing the center moves only the
+ * conversation's left edge, which is exactly the boundary we want to move.
  *
  * The rail DOM node is never re-parented: it stays exactly where React rendered
  * it inside the overlay layer, because moving a React-managed node out of its
@@ -51,6 +58,28 @@ function parseTracks(value: string): number[] {
 /** Format pixel tracks back into a `grid-template-columns` value. */
 function formatTracks(tracks: readonly number[]): string {
   return tracks.map((px) => `${Math.round(px)}px`).join(" ");
+}
+
+/**
+ * Widen the CENTER track by `railWidth`, leaving every other track untouched.
+ *
+ * The previous rail contribution (`appliedWidth`) is subtracted first, so
+ * calling this repeatedly with a changed host layout never accumulates: the
+ * result depends only on (tracks, railWidth), not on how many times it ran.
+ *
+ * @param tracks - the frame's current computed tracks in px.
+ * @param railWidth - the rail width in px (0 leaves the layout untouched).
+ * @param appliedWidth - how much this function added on the previous call.
+ * @returns the new track list, or the input when it cannot be adjusted.
+ */
+export function widenCenter(
+  tracks: readonly number[],
+  railWidth: number,
+  appliedWidth: number,
+): number[] {
+  if (railWidth <= 0 || tracks.length < 2) return [...tracks];
+  const center = Math.max(0, tracks[1] - appliedWidth);
+  return [tracks[0], center + railWidth, ...tracks.slice(2)];
 }
 
 /**
@@ -106,13 +135,13 @@ export function installRail(railElement: HTMLElement, railWidth: number): FrameP
     // Subtract our own contribution before re-adding it: the computed value
     // reflects the inline style we wrote last time, so this stays idempotent
     // across the MutationObserver's repeated calls.
-    const sidebar = Math.max(0, tracks[0] - appliedWidth);
-    frame.style.gridTemplateColumns = formatTracks([sidebar + railWidth, ...tracks.slice(1)]);
+    frame.style.gridTemplateColumns = formatTracks(widenCenter(tracks, railWidth, appliedWidth));
 
     appliedWidth = railWidth;
-    appliedOffset = sidebar;
+    // The rail occupies the left slice of the widened center track.
+    appliedOffset = tracks[0];
     railElement.style.display = "";
-    railElement.style.left = `${sidebar}px`;
+    railElement.style.left = `${appliedOffset}px`;
     railElement.style.width = `${railWidth}px`;
   };
 

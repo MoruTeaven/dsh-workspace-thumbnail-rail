@@ -20,6 +20,7 @@ const store = new Map<string, string>();
 } as unknown as Storage;
 
 const { DEFAULT_PREFS, loadPrefs, loadThumbnails, savePrefs, saveThumbnails } = await import("./storage.js");
+const { widenCenter } = await import("./frame.js");
 
 let passed = 0;
 function check(name: string, fn: () => void): void {
@@ -85,6 +86,38 @@ check("clamps an out-of-range width", () => {
 check("falls back on a non-numeric width", () => {
   store.set("dsh.wsr.prefs.v1", JSON.stringify({ width: "wide", enabled: "yes" }));
   assert.deepEqual(loadPrefs(), { width: 72, enabled: true });
+});
+
+console.log("frame geometry");
+
+check("widens the center track, never the sidebar", () => {
+  // 280 sidebar | 1000 center | 0 details
+  assert.deepEqual(widenCenter([280, 1000], 72, 0), [280, 1072]);
+});
+
+check("leaves the sidebar track so its drag handle stays put", () => {
+  const [sidebar] = widenCenter([280, 1000, 360], 72, 0);
+  assert.equal(sidebar, 280);
+});
+
+check("is idempotent across repeated observer runs", () => {
+  // First call adds 72 to center; the observer then sees 1072 and must not
+  // add another 72 because it subtracts the previous contribution first.
+  const once = widenCenter([280, 1000], 72, 0);
+  const twice = widenCenter(once, 72, 72);
+  assert.deepEqual(twice, once);
+});
+
+check("never shrinks the center below zero", () => {
+  assert.deepEqual(widenCenter([280, 30], 72, 0), [280, 102]);
+});
+
+check("returns the input untouched when the rail is hidden", () => {
+  assert.deepEqual(widenCenter([280, 1000, 360], 0, 0), [280, 1000, 360]);
+});
+
+check("returns the input untouched with too few tracks", () => {
+  assert.deepEqual(widenCenter([280], 72, 0), [280]);
 });
 
 console.log(`\n${passed} checks passed`);
