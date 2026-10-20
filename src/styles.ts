@@ -79,9 +79,9 @@ export const CSS = `
   height: 44px;
   padding: 0;
   border: 1px solid transparent;
-  border-radius: var(--dsw-radius-md, 10px);
+  border-radius: var(--dsw-radius-md, 12px);
   background: var(--dsw-alias-interactive-bg-default, rgba(128, 128, 128, 0.1));
-  color: var(--dsw-alias-label-tertiary, #8e8e8e);
+  color: var(--dsw-alias-label-tertiary, #81858c);
   cursor: pointer;
   overflow: hidden;
   display: flex;
@@ -167,14 +167,16 @@ export const CSS = `
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 6px;
-  padding: 8px 10px 6px;
+  gap: 4px;
+  height: 36px;
+  padding: 0 6px;
+  box-sizing: border-box;
 }
 
 .dsh-wsr-sessions__title {
   font-size: 11px;
   font-weight: 600;
-  color: var(--dsw-alias-label-secondary, #6b6b6b);
+  color: var(--dsw-alias-label-tertiary, #81858c);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -185,12 +187,12 @@ export const CSS = `
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: 28px;
+  height: 28px;
   border: none;
-  border-radius: var(--dsw-radius-xs, 4px);
+  border-radius: var(--dsw-radius-sm, 8px);
   background: transparent;
-  color: var(--dsw-alias-label-tertiary, #8e8e8e);
+  color: var(--dsw-alias-label-secondary, #61666b);
   cursor: pointer;
 }
 
@@ -215,29 +217,33 @@ export const CSS = `
   color: var(--dsw-alias-label-dimmed, #a0a0a0);
 }
 
+/* Mirrors the Host browser's session row (hIlkoa_sessionRow): 32px tall,
+   hover and selection share the same wash — no separate "selected" token
+   exists in the Host palette. */
 .dsh-wsr-row {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
   width: 100%;
-  padding: 6px 8px;
+  height: 32px;
+  box-sizing: border-box;
+  padding: 0 8px;
   border: none;
-  border-radius: var(--dsw-radius-sm, 7px);
+  border-radius: var(--dsw-radius-md, 12px);
   background: transparent;
   color: var(--dsw-alias-label-primary, #1a1a1a);
-  font-size: 12px;
+  font-size: 13px;
+  line-height: 20px;
   font-family: inherit;
   text-align: left;
   cursor: pointer;
+  user-select: none;
 }
 
-.dsh-wsr-row:hover {
+.dsh-wsr-row:hover,
+.dsh-wsr-row--active,
+.dsh-wsr-row--active:hover {
   background: var(--dsw-alias-interactive-bg-hover, rgba(128, 128, 128, 0.12));
-}
-
-.dsh-wsr-row--active {
-  background: var(--dsw-alias-interactive-bg-selected, rgba(128, 128, 128, 0.18));
-  color: var(--dsw-alias-label-primary, #1a1a1a);
 }
 
 .dsh-wsr-row__dot {
@@ -256,16 +262,22 @@ export const CSS = `
   white-space: nowrap;
 }
 
-/* ── Context menu ── */
+/* ── Context menu — styled after the Host's own dropdown (menu surface +
+   menuItem in the shell stylesheet): hairline l2 stroke, elevation shadow,
+   translucent backdrop blur, 12px items with radius-md. ── */
 .dsh-wsr-menu {
   position: fixed;
   z-index: 100000;
+  display: flex;
+  flex-direction: column;
   min-width: 158px;
   padding: 4px;
-  border-radius: var(--dsw-radius-lg, 12px);
-  background: var(--dsw-alias-bg-base, #fff);
-  border: 1px solid var(--dsw-alias-border-l1, rgba(0, 0, 0, 0.1));
-  box-shadow: var(--dsw-shadow-lv2, 0 8px 28px rgba(0, 0, 0, 0.18));
+  border: 0.5px solid var(--dsw-alias-border-l2, rgba(0, 0, 0, 0.14));
+  border-radius: var(--dsw-radius-lg, 16px);
+  background: color-mix(in srgb, var(--dsw-alias-bg-base, #fff) 88%, transparent);
+  box-shadow: var(--dsw-elevation-soft, 0 4px 16px rgba(0, 0, 0, 0.03), 0 0 24px rgba(0, 0, 0, 0.03));
+  backdrop-filter: var(--dsw-menu-backdrop-filter, blur(40px) saturate(150%));
+  -webkit-backdrop-filter: var(--dsw-menu-backdrop-filter, blur(40px) saturate(150%));
   font-family: var(--dsw-font-family, inherit);
 }
 
@@ -274,12 +286,12 @@ export const CSS = `
   align-items: center;
   gap: 7px;
   width: 100%;
-  padding: 6px 8px;
+  padding: 4px 7px;
   border: none;
-  border-radius: var(--dsw-radius-sm, 7px);
+  border-radius: var(--dsw-radius-md, 12px);
   background: transparent;
   color: var(--dsw-alias-label-primary, #1a1a1a);
-  font-size: 12px;
+  font-size: calc(var(--dsh-content-font-size-secondary, 13px) - 1px);
   font-family: inherit;
   text-align: left;
   cursor: pointer;
@@ -292,10 +304,6 @@ export const CSS = `
 
 .dsh-wsr-menu__item--danger {
   color: var(--dsw-alias-state-error-primary, #dc2626);
-}
-
-.dsh-wsr-menu__item--danger:hover {
-  background: var(--dsw-alias-interactive-bg-danger-hover, rgba(220, 38, 38, 0.1));
 }
 
 .dsh-wsr-menu__sep {
