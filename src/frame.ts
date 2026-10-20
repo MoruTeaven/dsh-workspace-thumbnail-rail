@@ -111,6 +111,13 @@ export function installRail(railElement: HTMLElement, railWidth: number): FrameP
   if (overlay === null || frame === null) return null;
 
   const originalInline = frame.style.gridTemplateColumns;
+  /**
+   * The exact inline value this function wrote last time. React overwrites it
+   * with its own solved widths on every panel drag and window resize, so a
+   * mismatch against this string is how we detect "the host just rewrote the
+   * grid" — at which point our contribution is gone and must NOT be subtracted.
+   */
+  let ourLastWrite = "";
   let appliedWidth = 0;
   let appliedOffset = 0;
   let disposed = false;
@@ -123,6 +130,7 @@ export function installRail(railElement: HTMLElement, railWidth: number): FrameP
       if (appliedWidth > 0) {
         appliedWidth = 0;
         appliedOffset = 0;
+        ourLastWrite = "";
         frame.style.gridTemplateColumns = originalInline;
       }
       railElement.style.display = "none";
@@ -132,11 +140,15 @@ export function installRail(railElement: HTMLElement, railWidth: number): FrameP
     const tracks = parseTracks(getComputedStyle(frame).gridTemplateColumns);
     if (tracks.length < 2) return;
 
-    // Subtract our own contribution before re-adding it: the computed value
-    // reflects the inline style we wrote last time, so this stays idempotent
-    // across the MutationObserver's repeated calls.
-    frame.style.gridTemplateColumns = formatTracks(widenCenter(tracks, railWidth, appliedWidth));
+    // Our contribution is still in place only when the inline style is byte
+    // for byte the one we wrote. After the host rewrote it, subtracting our
+    // width again would shrink the host's own center track by that much.
+    const oursIsPresent = ourLastWrite !== "" && frame.style.gridTemplateColumns === ourLastWrite;
 
+    const next = formatTracks(widenCenter(tracks, railWidth, oursIsPresent ? appliedWidth : 0));
+    frame.style.gridTemplateColumns = next;
+
+    ourLastWrite = next;
     appliedWidth = railWidth;
     // The rail occupies the left slice of the widened center track.
     appliedOffset = tracks[0];
@@ -161,6 +173,8 @@ export function installRail(railElement: HTMLElement, railWidth: number): FrameP
       if (disposed) return;
       disposed = true;
       observer.disconnect();
+      ourLastWrite = "";
+      appliedWidth = 0;
       frame.style.gridTemplateColumns = originalInline;
       railElement.style.display = "none";
       railElement.style.left = "";
