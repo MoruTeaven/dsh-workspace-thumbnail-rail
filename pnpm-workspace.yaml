@@ -1,0 +1,5 @@
+# pnpm 11 moved build-script approval out of package.json into this file.
+# esbuild ships a platform binary through its install script; without it the
+# bundler cannot run at all.
+allowBuilds:
+  esbuild: true

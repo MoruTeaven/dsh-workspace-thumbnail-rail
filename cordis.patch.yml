@@ -1,0 +1,5 @@
+# @moruteaven/dsh-workspace-thumbnail-rail — bundle patch.
+# dsh.bundle.patch is mandatory for packages listed in dsh.profile.bundles.
+- insert:
+    - id: workspace-thumbnail-rail
+      name: "@moruteaven/dsh-workspace-thumbnail-rail"

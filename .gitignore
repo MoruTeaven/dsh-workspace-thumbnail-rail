@@ -1,0 +1,18 @@
+node_modules/
+lib/
+*.tsbuildinfo
+.DS_Store
+# Windows system cache artifacts
+%SystemDrive%/
+
+# Local debugging scratch files (telemetry probes, screenshots)
+.measure-*
+.measure.log
+.shot*
+.screen.png
+.diag*
+.verify*
+
+# Mnemon runtime
+.mnemon/
+.npmrc
