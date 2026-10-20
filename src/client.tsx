@@ -23,7 +23,7 @@ import { injectStyles } from "./styles";
  */
 
 /** Services this plugin waits for before registering. */
-const inject = ["slots", "workspaces", "sessions"];
+const inject = ["slots", "uiWorkspace", "workspaces"];
 
 /** The slot this plugin contributes to. */
 const SLOT_KEY = "sidebar.workspaces";
@@ -31,46 +31,47 @@ const SLOT_KEY = "sidebar.workspaces";
 /** This plugin's entry id — the Host's own browser registers under another. */
 const ENTRY_ID = "workspace-thumbnail-rail";
 
-/** The Host faces this plugin drives, kept as a narrow local shape. */
-interface WorkspaceFace {
-  connectWorkspace(workspaceId: string): Promise<string>;
-  delete(workspaceId: string): Promise<void>;
+/**
+ * The `uiWorkspace` face owns every open/start navigation: `ctx.sessions` only
+ * exposes retain/search/fork, and `connectWorkspace` lives here too, not on
+ * `ctx.workspaces` (calling either wrong name throws and the click silently
+ * does nothing).
+ */
+interface UiWorkspaceFace {
+  /** Select a session and show its conversation as one navigation action. */
+  openSession(target: string): void;
+  /** Connect a workspace (reusing its blank session) and open it. */
+  openWorkspace(workspaceId: string): Promise<void>;
+  /** Start a fresh session in a workspace and open it. */
+  startSession(workspaceId?: string): void;
+  /** Archive a session, clearing it when it is the current selection. */
   archiveSession(sessionId: string): Promise<void>;
 }
 
-interface SessionFace {
-  open(sessionId: string): void;
+/** The workspace-controller face, narrowed to the one call this plugin needs. */
+interface WorkspaceFace {
+  delete(workspaceId: string): Promise<void>;
 }
 
 function apply(ctx: any) {
+  const uiWorkspace = ctx.uiWorkspace as UiWorkspaceFace;
   const workspaces = ctx.workspaces as WorkspaceFace;
-  const sessions = ctx.sessions as SessionFace;
 
   const actions: RailActions = {
-    openSession: (sessionId) => sessions.open(sessionId),
+    openSession: (sessionId) => uiWorkspace.openSession(sessionId),
 
-    // The Host resolves the workspace's blank session (reusing an existing one)
-    // and this call opens it, so navigation semantics stay Host-owned.
+    // openWorkspace connects and navigates as one Host action; a refusal is
+    // already surfaced through the Host's own workspace notice.
     startWorkspace: (workspaceId) => {
-      workspaces
-        .connectWorkspace(workspaceId)
-        .then((sessionId) => sessions.open(sessionId))
-        .catch(() => {
-          /* the workspace column itself stays usable; the Host logs the reason */
-        });
+      uiWorkspace.openWorkspace(workspaceId).catch(() => {
+        /* the workspace column itself stays usable; the Host logs the reason */
+      });
     },
 
-    newSessionIn: (workspaceId) => {
-      workspaces
-        .connectWorkspace(workspaceId)
-        .then((sessionId) => sessions.open(sessionId))
-        .catch(() => {
-          /* same as startWorkspace */
-        });
-    },
+    newSessionIn: (workspaceId) => uiWorkspace.startSession(workspaceId),
 
     removeWorkspace: (workspaceId) => workspaces.delete(workspaceId),
-    archiveSession: (sessionId) => workspaces.archiveSession(sessionId),
+    archiveSession: (sessionId) => uiWorkspace.archiveSession(sessionId),
   };
 
   ctx.slots.inject(SLOT_KEY, () => {
