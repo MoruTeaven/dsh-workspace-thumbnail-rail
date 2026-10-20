@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FolderIcon, ImageIcon, ImageOffIcon, TrashIcon } from "./icons";
+import { ArchiveIcon, FolderIcon, ImageIcon, ImageOffIcon, OpenIcon, TrashIcon } from "./icons";
 import { ThumbnailError, makeThumbnail } from "./image";
 import { resolveSelectedWorkspace, sessionsOfWorkspace } from "./sessions";
 import { loadPrefs, loadThumbnails, savePrefs, saveThumbnails } from "./storage";
@@ -59,9 +59,12 @@ const TOAST_MS = 2600;
 
 /** An open context menu, anchored in viewport coordinates. */
 interface MenuState {
-  workspaceId: string;
   x: number;
   y: number;
+  /** Which row the menu acts on. */
+  target:
+    | { kind: "workspace"; workspaceId: string }
+    | { kind: "session"; sessionId: string };
 }
 
 /** The browser root. */
@@ -244,6 +247,38 @@ export function Rail({
     }
   }, [clearFor, notify]);
 
+  /**
+   * Archive a session from its context menu, with visible feedback — the
+   * archive undo toast belongs to the Host's own browser, which this seat
+   * replaces, so without a local notice a right-click silently deleted a row.
+   */
+  const onArchiveSession = useCallback(async (sessionId: string) => {
+    try {
+      await archiveSession(sessionId);
+      notify("已归档会话");
+    } catch {
+      notify("归档失败：会话可能有正在运行的工作");
+    }
+  }, [archiveSession, notify]);
+
+  /** Render whichever context menu is open (workspace tile or session row). */
+  const menuView = menu === null ? null : menu.target.kind === "workspace" ? (
+    <Menu
+      menu={menu}
+      hasThumbnail={thumbnails[menu.target.workspaceId] !== undefined}
+      onClose={() => setMenu(null)}
+      onSet={() => { setMenu(null); pickFor((menu.target as { workspaceId: string }).workspaceId); }}
+      onClear={() => { clearFor((menu.target as { workspaceId: string }).workspaceId); setMenu(null); }}
+      onDelete={() => { setMenu(null); void onDeleteWorkspace((menu.target as { workspaceId: string }).workspaceId); }}
+    />
+  ) : (
+    <SessionMenu
+      menu={menu}
+      onOpen={() => { openSession((menu.target as { sessionId: string }).sessionId); setMenu(null); }}
+      onArchive={() => { setMenu(null); void onArchiveSession((menu.target as { sessionId: string }).sessionId); }}
+    />
+  );
+
   // The shared hidden file input and the context menu render in both modes.
   const chrome = (
     <>
@@ -254,16 +289,7 @@ export function Rail({
         style={{ display: "none" }}
         onChange={onFileChosen}
       />
-      {menu !== null && (
-        <Menu
-          menu={menu}
-          hasThumbnail={thumbnails[menu.workspaceId] !== undefined}
-          onClose={() => setMenu(null)}
-          onSet={() => { setMenu(null); pickFor(menu.workspaceId); }}
-          onClear={() => { clearFor(menu.workspaceId); setMenu(null); }}
-          onDelete={() => { setMenu(null); void onDeleteWorkspace(menu.workspaceId); }}
-        />
-      )}
+      {menuView}
       {toast !== null && <div className="dsh-wsr-toast">{toast}</div>}
     </>
   );
@@ -288,7 +314,7 @@ export function Rail({
           e.preventDefault();
           const rect = e.currentTarget.getBoundingClientRect();
           setMenu({
-            workspaceId: workspace.workspaceId,
+            target: { kind: "workspace", workspaceId: workspace.workspaceId },
             x: rect.right + 6,
             y: rect.top,
           });
@@ -369,7 +395,12 @@ export function Rail({
               onContextMenu={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                void archiveSession(row.id);
+                const rect = e.currentTarget.getBoundingClientRect();
+                setMenu({
+                  target: { kind: "session", sessionId: row.id },
+                  x: rect.right + 6,
+                  y: rect.top,
+                });
               }}
             >
               {row.running && <span className="dsh-wsr-row__dot" aria-label="运行中" />}
@@ -419,6 +450,39 @@ function Menu(props: MenuProps) {
         onClick={props.onDelete}
       >
         <TrashIcon size={14} /> 移除此工作区
+      </button>
+    </div>
+  );
+}
+
+/** Props the session context menu needs. */
+interface SessionMenuProps {
+  menu: MenuState;
+  onOpen(): void;
+  onArchive(): void;
+}
+
+/** The right-click menu for one session row: open it, or archive with feedback. */
+function SessionMenu(props: SessionMenuProps) {
+  const x = Math.max(4, Math.min(props.menu.x, window.innerWidth - 166));
+  const y = Math.max(4, Math.min(props.menu.y, window.innerHeight - 77));
+  return (
+    <div
+      className="dsh-wsr-menu"
+      style={{ left: x, top: y }}
+      onPointerDown={(e) => e.stopPropagation()}
+      role="menu"
+    >
+      <button type="button" className="dsh-wsr-menu__item" role="menuitem" onClick={props.onOpen}>
+        <OpenIcon size={14} /> 打开
+      </button>
+      <button
+        type="button"
+        className="dsh-wsr-menu__item dsh-wsr-menu__item--danger"
+        role="menuitem"
+        onClick={props.onArchive}
+      >
+        <ArchiveIcon size={14} /> 归档会话
       </button>
     </div>
   );
