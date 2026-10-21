@@ -12,6 +12,12 @@ Give every workspace in DeepSeek Harness (DSH) a thumbnail image, and add a vert
 - **Context menu**: set / remove a thumbnail, remove the workspace, hide the rail.
 - **Resizable**: drag the handle at the bottom of the rail to change its width, or hide the rail entirely.
 - **Cross-tab sync**: set a thumbnail in one tab and every other open DSH tab updates immediately.
+- **Session title filter**: typing in the session header filters the list instantly by title, without a round trip.
+- **Content search**: the search button in the session header runs the Host's own message-content index, so you find sessions by what was said inside them, not just by title. Results show a snippet; click one to open it.
+- **Rename a session**: right-click a row and choose 重命名 to edit its title in place.
+- **Copy session id**: right-click a row and choose 复制会话 ID.
+- **Pin a session**: right-click a row and choose 置顶 (shown only when the Host build supports it). Pinned sessions lead the list, matching the order the Host itself uses.
+- **Archive view**: the archive button in the session header lists archived sessions with a per-row restore.
 
 ## Install
 
