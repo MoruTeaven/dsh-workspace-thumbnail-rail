@@ -20,6 +20,17 @@ pnpm install
 pnpm run build
 ```
 
+## 本地开发回路（本地 profile 已链接本仓库）
+
+本机 DSH 的桌面 profile 已用 `link:` 把 `@moruteaven/dsh-workspace-thumbnail-rail`
+直接软链接到本仓库目录（位于 `~/.dsh/profiles/headless/node_modules/@moruteaven/`），
+因此**不用重新 install**、不用拷贝：`pnpm run build` 之后，直接到 DSH Web GUI 里
+**Ctrl+R 刷新**界面就会加载最新 `lib/` 产物。
+
+> 如果将来换了机器或重新 `pnpm install` 后失效，确认
+> `~/.dsh/profiles/*/package.json` 里该依赖仍是 `link:...`，且
+> `node_modules/@moruteaven/dsh-workspace-thumbnail-rail` 是指向本仓库的链接（而非文件拷贝）。
+
 ## Use
 
 1. Right-click any workspace tile in the rail.
