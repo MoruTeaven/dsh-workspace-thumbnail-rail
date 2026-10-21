@@ -32,6 +32,13 @@ export const FolderIcon = (props: IconProps = {}) =>
     <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
   </>);
 
+/** Session list header: start a new session in this workspace. */
+export const PlusIcon = (props: IconProps = {}) =>
+  base(props.size ?? 14, props, <>
+    <path d="M5 12h14" />
+    <path d="M12 5v14" />
+  </>);
+
 /** Menu item: choose a thumbnail image for this workspace. */
 export const ImageIcon = (props: IconProps = {}) =>
   base(props.size ?? 14, props, <>

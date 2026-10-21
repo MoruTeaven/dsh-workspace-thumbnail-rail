@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArchiveIcon, FolderIcon, ImageIcon, ImageOffIcon, OpenIcon, TrashIcon } from "./icons";
+import { ArchiveIcon, FolderIcon, ImageIcon, ImageOffIcon, OpenIcon, PlusIcon, TrashIcon } from "./icons";
 import { ThumbnailError, makeThumbnail } from "./image";
 import { resolveSelectedWorkspace, sessionsOfWorkspace } from "./sessions";
 import { loadPrefs, loadThumbnails, savePrefs, saveThumbnails } from "./storage";
@@ -379,7 +379,7 @@ export function Rail({
               aria-label="在此工作区新建会话"
               onClick={() => newSessionIn(selected.workspaceId)}
             >
-              <ImageIcon size={14} />
+              <PlusIcon size={14} />
             </button>
           )}
         </div>
