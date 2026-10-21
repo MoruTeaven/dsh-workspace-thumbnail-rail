@@ -21,8 +21,9 @@ const store = new Map<string, string>();
 } as unknown as Storage;
 
 const { DEFAULT_PREFS, loadPrefs, loadThumbnails, savePrefs, saveThumbnails } = await import("./storage.js");
-const { resolveSelectedWorkspace, sessionsOfWorkspace } = await import("./sessions.js");
+const { resolveSelectedWorkspace, sessionsOfWorkspace, filterByTitle, orderWithPins } = await import("./sessions.js");
 type SessionList = import("./types.js").SessionListState;
+type SessionSummary = import("./types.js").SessionSummary;
 type Workspace = import("./types.js").WorkspaceView;
 
 let passed = 0;
@@ -102,12 +103,21 @@ const ws = (workspaceId: string, sessionIds: string[]): Workspace => ({
   updatedAt: "2026-01-01T00:00:00.000Z",
 });
 
-const session = (id: string, updatedAt: number, blank = false): SessionList["byId"][string] => ({
+const session = (id: string, updatedAt: number, blank = false): SessionSummary => ({
   id,
   displayTitle: id,
   updatedAt,
   running: false,
   blank,
+});
+
+/** A session row with a display title that differs from its id. */
+const titled = (id: string, displayTitle: string, updatedAt: number): SessionSummary => ({
+  id,
+  displayTitle,
+  updatedAt,
+  running: false,
+  blank: false,
 });
 
 /** A session list snapshot with an explicitly optional current session. */
@@ -164,6 +174,68 @@ check("skips session ids the list has not seen yet", () => {
     { archived: [], current: undefined },
   );
   assert.deepEqual(rows.map((r) => r.id), ["s1"]);
+});
+
+console.log("title filter");
+
+check("an empty query keeps every row in order", () => {
+  const rows = [session("s1", 100), session("s2", 200)];
+  assert.deepEqual(filterByTitle(rows, ""), rows);
+  assert.deepEqual(filterByTitle(rows, "   "), rows);
+});
+check("matches case-insensitively on the display title", () => {
+  const rows = [titled("s1", "Alpha release", 100), titled("s2", "beta test", 200), titled("s3", "ALPHA two", 300)];
+  assert.deepEqual(
+    filterByTitle(rows, "alpha").map((r) => r.id),
+    ["s1", "s3"],
+  );
+});
+
+check("matches on the title, not the session id", () => {
+  const rows = [titled("session-alpha", "a plain row", 100), titled("s2", "Alpha row", 200)];
+  assert.deepEqual(
+    filterByTitle(rows, "alpha").map((r) => r.id),
+    ["s2"],
+  );
+});
+
+check("returns nothing when no title matches", () => {
+  const rows = [titled("s1", "release notes", 100)];
+  assert.deepEqual(filterByTitle(rows, "zzz"), []);
+});
+
+check("keeps the display order of the matches", () => {
+  const rows = [titled("c", "cat", 1), titled("a", "apple", 2), titled("b", "ant", 3)];
+  assert.deepEqual(
+    filterByTitle(rows, "a").map((r) => r.id),
+    ["c", "a", "b"],
+  );
+});
+
+console.log("pin ordering");
+
+check("pinned rows lead, the rest keep the incoming order", () => {
+  const rows = [titled("a", "a", 1), titled("b", "b", 2), titled("c", "c", 3), titled("d", "d", 4)];
+  assert.deepEqual(
+    orderWithPins(rows, ["c", "a"]).map((r) => r.id),
+    ["c", "a", "b", "d"],
+    "the caller already decided the unpinned order; pinning must not re-sort it",
+  );
+});
+
+check("the pin order comes from the host, not from recency", () => {
+  const rows = [titled("new", "new", 500), titled("old", "old", 1)];
+  assert.deepEqual(orderWithPins(rows, ["old"]).map((r) => r.id), ["old", "new"]);
+});
+
+check("an empty pin set leaves the rows in the incoming order", () => {
+  const rows = [titled("a", "a", 1), titled("b", "b", 2)];
+  assert.deepEqual(orderWithPins(rows, []).map((r) => r.id), ["a", "b"]);
+});
+
+check("pin ids that are not on screen do not disturb the order", () => {
+  const rows = [titled("a", "a", 1), titled("b", "b", 2)];
+  assert.deepEqual(orderWithPins(rows, ["ghost", "b"]).map((r) => r.id), ["b", "a"]);
 });
 
 console.log("workspace selection");

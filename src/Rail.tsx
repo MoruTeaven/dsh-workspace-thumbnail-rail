@@ -1,11 +1,27 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArchiveIcon, FolderIcon, ImageIcon, ImageOffIcon, OpenIcon, PlusIcon, TrashIcon } from "./icons";
+import {
+  ArchiveIcon,
+  ArchiveRestoreIcon,
+  ArrowLeftIcon,
+  CopyIcon,
+  FolderIcon,
+  ImageIcon,
+  ImageOffIcon,
+  OpenIcon,
+  PencilIcon,
+  PinIcon,
+  PlusIcon,
+  SearchIcon,
+  TrashIcon,
+} from "./icons";
 import { ThumbnailError, makeThumbnail } from "./image";
-import { resolveSelectedWorkspace, sessionsOfWorkspace } from "./sessions";
+import { filterByTitle, orderWithPins, resolveSelectedWorkspace, sessionsOfWorkspace } from "./sessions";
 import { loadPrefs, loadThumbnails, savePrefs, saveThumbnails } from "./storage";
 import type {
   RailPreferences,
   SessionListState,
+  SessionSearchHit,
+  SessionSummary,
   ThumbnailMap,
   WorkspaceListState,
   WorkspaceView,
@@ -34,6 +50,29 @@ export interface RailActions {
   removeWorkspace: (workspaceId: string) => Promise<void>;
   /** Archive a session so it leaves every list. */
   archiveSession: (sessionId: string) => Promise<void>;
+  /** Restore an archived session to its recorded workspace position. */
+  unarchiveSession: (sessionId: string) => Promise<void>;
+  /**
+   * Search the Host's message-content index across every workspace.
+   *
+   * @returns the bounded page, or null when the search failed (already logged
+   * by the Host) — the UI shows "no results" either way.
+   */
+  searchSessions: (
+    query: string,
+    signal: AbortSignal,
+  ) => Promise<{ items: SessionSearchHit[]; hasMore: boolean } | null>;
+  /**
+   * Rename a session.
+   *
+   * @throws with the Host's reason when it refuses (empty title, duplicate, or
+   * a session whose write is not permitted).
+   */
+  renameSession: (sessionId: string, title: string) => Promise<void>;
+  /** Pin a session; undefined when the Host build does not expose pinning. */
+  pinSession?: (sessionId: string) => Promise<void>;
+  /** Remove a session's pin; undefined when the Host build lacks pinning. */
+  unpinSession?: (sessionId: string) => Promise<void>;
 }
 
 /** Owner props the sidebar passes to this seat (contract/slots.ts:43-48). */
@@ -67,6 +106,23 @@ interface MenuState {
     | { kind: "session"; sessionId: string };
 }
 
+/** What the session column shows: the workspace's rows, or a search result. */
+type SessionPane =
+  | { kind: "list" }
+  | { kind: "search"; query: string }
+  | { kind: "archive" };
+
+/** An open inline rename draft, for one session row. */
+interface RenameState {
+  sessionId: string;
+  /** The title the row had when the draft opened, so "unchanged" is detectable. */
+  original: string;
+  /** What the user has typed so far. */
+  draft: string;
+  /** The Host's refusal, when the last submit failed. */
+  error: string | null;
+}
+
 /** The browser root. */
 export function Rail({
   wide,
@@ -78,9 +134,18 @@ export function Rail({
   newSessionIn,
   removeWorkspace,
   archiveSession,
+  unarchiveSession,
+  searchSessions,
+  renameSession,
+  pinSession,
+  unpinSession,
 }: RailProps) {
   const workspaces = useWorkspaces((state) => state.items);
   const archived = useWorkspaces((state) => state.archivedSessionIds);
+  // The Host's registry-global pin set, in pin order. Pinned sessions are
+  // surfaced above every unpinned one on the Host's own grouping surfaces, so
+  // the rail mirrors that ordering rather than inventing its own.
+  const pinned = useWorkspaces((state) => state.pinnedSessionIds);
   const sessions = useSessions((state) => ({
     ids: state.ids,
     byId: state.byId,
@@ -92,8 +157,17 @@ export function Rail({
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
+  // Search box + which pane the session column renders.
+  const [query, setQuery] = useState("");
+  const [pane, setPane] = useState<SessionPane>({ kind: "list" });
+  const [hits, setHits] = useState<SessionSearchHit[] | null>(null);
+  const [renaming, setRenaming] = useState<RenameState | null>(null);
+  const [renameBusy, setRenameBusy] = useState(false);
+
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const pendingPickRef = useRef<string | null>(null);
+  const searchAbortRef = useRef<AbortController | null>(null);
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   // Cross-page sync. The storage event fires in every page EXCEPT the writer,
@@ -116,6 +190,42 @@ export function Rail({
   }, []);
 
   /**
+   * Run the Host search as the user types.
+   *
+   * Debounced, because every keystroke is a Host RPC against the message index.
+   * A superseded request is aborted rather than awaited, so the newest query
+   * always wins and a slow response for abandoned text never lands. Only the
+   * search pane shows hits: the title filter in the list pane needs no request.
+   */
+  useEffect(() => {
+    if (pane.kind !== "search") return;
+    if (searchTimerRef.current !== undefined) clearTimeout(searchTimerRef.current);
+    if (query.trim() === "") {
+      searchAbortRef.current?.abort();
+      setHits(null);
+      return;
+    }
+    searchTimerRef.current = setTimeout(() => {
+      searchAbortRef.current?.abort();
+      const controller = new AbortController();
+      searchAbortRef.current = controller;
+      void searchSessions(query, controller.signal).then((result) => {
+        if (controller.signal.aborted) return;
+        setHits(result === null ? [] : result.items);
+      });
+    }, 250);
+    return () => {
+      if (searchTimerRef.current !== undefined) clearTimeout(searchTimerRef.current);
+    };
+  }, [pane.kind, query, searchSessions]);
+
+  // Abort whatever search is in flight when the rail unmounts.
+  useEffect(() => () => {
+    searchAbortRef.current?.abort();
+    if (searchTimerRef.current !== undefined) clearTimeout(searchTimerRef.current);
+  }, []);
+
+  /**
    * The workspace whose sessions are listed: a remembered selection, else the
    * one owning the current session, else the first.
    */
@@ -129,12 +239,36 @@ export function Rail({
     [workspaces, selectedId],
   );
 
-  const rows = useMemo(
-    () => (selected === undefined
-      ? []
-      : sessionsOfWorkspace(selected, sessions, { archived, current: sessions.current })),
-    [selected, sessions, archived],
-  );
+  const rows = useMemo(() => {
+    if (selected === undefined) return [];
+    const all = sessionsOfWorkspace(selected, sessions, { archived, current: sessions.current });
+    // The title filter is a local, instant refinement of the same rows; the
+    // Host content search is the deeper pane the search button switches to.
+    const visible = pane.kind === "list" ? filterByTitle(all, query) : all;
+    // Pinned sessions lead, in the Host's own pin order; the rest keep the
+    // newest-first order underneath, so the mirror matches what the Host shows.
+    return orderWithPins(visible, pinned ?? []);
+  }, [selected, sessions, archived, pane.kind, query, pinned]);
+
+  /**
+   * The archived sessions, newest first.
+   *
+   * The archive set is registry-global (it spans every workspace), so these rows
+   * are collected from the whole session list rather than from the selected
+   * workspace. They keep the same "skip ids the list has not seen yet" rule as
+   * the live rows, because a session whose summary is still loading has no title
+   * to show and cannot be opened yet.
+   */
+  const archivedRows = useMemo(() => {
+    if (pane.kind !== "archive") return [];
+    const rows: SessionSummary[] = [];
+    for (const id of archived) {
+      const summary = sessions.byId[id];
+      if (summary === undefined) continue;
+      rows.push(summary);
+    }
+    return rows.sort((a, b) => b.updatedAt - a.updatedAt);
+  }, [pane.kind, archived, sessions.byId]);
 
   /** Remember the selected workspace and open its conversation. */
   const select = useCallback((workspaceId: string) => {
@@ -261,6 +395,90 @@ export function Rail({
     }
   }, [archiveSession, notify]);
 
+  /** Copy a session id, with feedback — the clipboard API is silently refused
+   *  outside a secure context, so a failure must not leave the user guessing. */
+  const onCopySessionId = useCallback(async (sessionId: string) => {
+    try {
+      await navigator.clipboard.writeText(sessionId);
+      notify("已复制会话 ID");
+    } catch {
+      notify("复制失败：请检查浏览器剪贴板权限");
+    }
+  }, [notify]);
+
+  /** Restore one archived session from the archive pane. */
+  const onUnarchive = useCallback(async (sessionId: string) => {
+    try {
+      await unarchiveSession(sessionId);
+      notify("已恢复会话");
+    } catch {
+      notify("恢复失败");
+    }
+  }, [notify, unarchiveSession]);
+
+  /** Membership test for the pin set, rebuilt only when the Host's set changes. */
+  const pinnedSet = useMemo(() => new Set(pinned ?? []), [pinned]);
+
+  /** Pin one session; a Host refusal is reported without losing the row. */
+  const onPinSession = useCallback(async (sessionId: string) => {
+    if (pinSession === undefined) return;
+    try {
+      await pinSession(sessionId);
+    } catch {
+      notify("置顶失败");
+    }
+  }, [notify, pinSession]);
+
+  /** Remove one session's pin; a Host refusal is reported the same way. */
+  const onUnpinSession = useCallback(async (sessionId: string) => {
+    if (unpinSession === undefined) return;
+    try {
+      await unpinSession(sessionId);
+    } catch {
+      notify("取消置顶失败");
+    }
+  }, [notify, unpinSession]);
+
+  /** Switch the session column between the workspace list, search and archive. */
+  const showPane = useCallback((next: SessionPane) => {
+    setPane(next);
+    setRenaming(null);
+    setRenameBusy(false);
+    if (next.kind !== "search") {
+      searchAbortRef.current?.abort();
+      if (searchTimerRef.current !== undefined) clearTimeout(searchTimerRef.current);
+      setHits(null);
+    }
+    if (next.kind !== "list") setQuery("");
+  }, []);
+
+  /** Open the inline rename draft for one session row. */
+  const startRename = useCallback((sessionId: string, current: string) => {
+    setRenaming({ sessionId, original: current, draft: current, error: null });
+    setRenameBusy(false);
+  }, []);
+
+  /** Commit the rename draft, surfacing the Host's refusal on the row. */
+  const submitRename = useCallback(async () => {
+    if (renaming === null || renameBusy) return;
+    const trimmed = renaming.draft.trim();
+    if (trimmed === "" || trimmed === renaming.original) {
+      setRenaming(null);
+      return;
+    }
+    setRenameBusy(true);
+    try {
+      await renameSession(renaming.sessionId, trimmed);
+      setRenaming(null);
+      notify("已重命名会话");
+    } catch (error) {
+      setRenameBusy(false);
+      setRenaming((current) => (current === null
+        ? null
+        : { ...current, error: error instanceof Error ? error.message : "重命名失败" }));
+    }
+  }, [renaming, renameBusy, renameSession, notify]);
+
   /** Render whichever context menu is open (workspace tile or session row). */
   const menuView = menu === null ? null : menu.target.kind === "workspace" ? (
     <Menu
@@ -275,6 +493,24 @@ export function Rail({
     <SessionMenu
       menu={menu}
       onOpen={() => { openSession((menu.target as { sessionId: string }).sessionId); setMenu(null); }}
+      onRename={() => {
+        const sessionId = (menu.target as { sessionId: string }).sessionId;
+        setMenu(null);
+        showPane({ kind: "list" });
+        startRename(sessionId, sessions.byId[sessionId]?.displayTitle ?? "");
+      }}
+      onCopyId={() => { setMenu(null); void onCopySessionId((menu.target as { sessionId: string }).sessionId); }}
+      onPin={pinSession === undefined ? undefined : () => {
+        const sessionId = (menu.target as { sessionId: string }).sessionId;
+        setMenu(null);
+        void onPinSession(sessionId);
+      }}
+      onUnpin={unpinSession === undefined ? undefined : () => {
+        const sessionId = (menu.target as { sessionId: string }).sessionId;
+        setMenu(null);
+        void onUnpinSession(sessionId);
+      }}
+      pinned={menu.target.kind === "session" && pinnedSet.has(menu.target.sessionId)}
       onArchive={() => { setMenu(null); void onArchiveSession((menu.target as { sessionId: string }).sessionId); }}
     />
   );
@@ -369,44 +605,205 @@ export function Rail({
       )}
 
       <div className="dsh-wsr-sessions">
-        <div className="dsh-wsr-sessions__head">
-          <span className="dsh-wsr-sessions__title">{selected?.title ?? "会话"}</span>
-          {selected !== undefined && (
+        {pane.kind === "list" && (
+          <div className="dsh-wsr-sessions__head">
+            <span className="dsh-wsr-sessions__title">{selected?.title ?? "会话"}</span>
+            <div className="dsh-wsr-sessions__actions">
+              <button
+                type="button"
+                className="dsh-wsr-sessions__new"
+                title="查看归档会话"
+                aria-label="查看归档会话"
+                onClick={() => showPane({ kind: "archive" })}
+              >
+                <ArchiveRestoreIcon size={14} />
+              </button>
+              <button
+                type="button"
+                className="dsh-wsr-sessions__new"
+                title="搜索全部会话内容"
+                aria-label="搜索全部会话内容"
+                onClick={() => showPane({ kind: "search", query: "" })}
+              >
+                <SearchIcon size={14} />
+              </button>
+              {selected !== undefined && (
+                <button
+                  type="button"
+                  className="dsh-wsr-sessions__new"
+                  title="在此工作区新建会话"
+                  aria-label="在此工作区新建会话"
+                  onClick={() => newSessionIn(selected.workspaceId)}
+                >
+                  <PlusIcon size={14} />
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {pane.kind === "search" && (
+          <div className="dsh-wsr-sessions__head">
             <button
               type="button"
               className="dsh-wsr-sessions__new"
-              title="在此工作区新建会话"
-              aria-label="在此工作区新建会话"
-              onClick={() => newSessionIn(selected.workspaceId)}
+              title="返回会话列表"
+              aria-label="返回会话列表"
+              onClick={() => showPane({ kind: "list" })}
             >
-              <PlusIcon size={14} />
+              <ArrowLeftIcon size={14} />
             </button>
-          )}
-        </div>
-        <div className="dsh-wsr-sessions__scroll">
-          {rows.length === 0 && <div className="dsh-wsr-sessions__empty">暂无会话</div>}
-          {rows.map((row) => (
+            <input
+              className="dsh-wsr-search"
+              type="text"
+              value={query}
+              placeholder="搜索会话内容"
+              aria-label="搜索会话内容"
+              // eslint-disable-next-line jsx-a11y/no-autofocus
+              autoFocus
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") showPane({ kind: "list" });
+              }}
+            />
+          </div>
+        )}
+
+        {pane.kind === "archive" && (
+          <div className="dsh-wsr-sessions__head">
             <button
               type="button"
-              key={row.id}
-              className={`dsh-wsr-row${row.id === sessions.current ? " dsh-wsr-row--active" : ""}`}
-              title={row.displayTitle}
-              onClick={() => openSession(row.id)}
-              onContextMenu={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                const rect = e.currentTarget.getBoundingClientRect();
-                setMenu({
-                  target: { kind: "session", sessionId: row.id },
-                  x: rect.right + 6,
-                  y: rect.top,
-                });
-              }}
+              className="dsh-wsr-sessions__new"
+              title="返回会话列表"
+              aria-label="返回会话列表"
+              onClick={() => showPane({ kind: "list" })}
             >
-              {row.running && <span className="dsh-wsr-row__dot" aria-label="运行中" />}
-              <span className="dsh-wsr-row__title">{row.displayTitle}</span>
+              <ArrowLeftIcon size={14} />
             </button>
-          ))}
+            <span className="dsh-wsr-sessions__title">归档的会话</span>
+          </div>
+        )}
+
+        <div className="dsh-wsr-sessions__scroll">
+          {pane.kind === "list" && (
+            <>
+              {rows.length === 0 && (
+                <div className="dsh-wsr-sessions__empty">
+                  {query.trim() === "" ? "暂无会话" : "没有匹配的会话"}
+                </div>
+              )}
+              {rows.map((row) => (
+                renaming !== null && renaming.sessionId === row.id ? (
+                  <div className="dsh-wsr-row dsh-wsr-row--rename" key={row.id}>
+                    <input
+                      className="dsh-wsr-rename"
+                      type="text"
+                      value={renaming.draft}
+                      aria-label={`重命名 ${row.displayTitle}`}
+                      autoFocus
+                      disabled={renameBusy}
+                      onChange={(e) => setRenaming(
+                        (current) => (current === null ? null : { ...current, draft: e.target.value, error: null }),
+                      )}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          void submitRename();
+                        } else if (e.key === "Escape") {
+                          e.preventDefault();
+                          setRenaming(null);
+                        }
+                      }}
+                      onBlur={() => {
+                        // A blur commits the same draft, so clicking away never
+                        // silently discards a half-typed title.
+                        void submitRename();
+                      }}
+                    />
+                    {renaming.error !== null && (
+                      <span className="dsh-wsr-rename__error">{renaming.error}</span>
+                    )}
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    key={row.id}
+                    className={`dsh-wsr-row${row.id === sessions.current ? " dsh-wsr-row--active" : ""}`}
+                    title={row.displayTitle}
+                    onClick={() => openSession(row.id)}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      setMenu({
+                        target: { kind: "session", sessionId: row.id },
+                        x: rect.right + 6,
+                        y: rect.top,
+                      });
+                    }}
+                  >
+                    {pinnedSet.has(row.id) && (
+                      <PinIcon size={12} className="dsh-wsr-row__pin" aria-label="已置顶" />
+                    )}
+                    {row.running && <span className="dsh-wsr-row__dot" aria-label="运行中" />}
+                    <span className="dsh-wsr-row__title">{row.displayTitle}</span>
+                  </button>
+                )
+              ))}
+            </>
+          )}
+
+          {pane.kind === "search" && (
+            <>
+              {hits === null && (
+                <div className="dsh-wsr-sessions__empty">
+                  {query.trim() === "" ? "请输入关键词" : "搜索中…"}
+                </div>
+              )}
+              {hits !== null && hits.length === 0 && (
+                <div className="dsh-wsr-sessions__empty">没有找到相关会话</div>
+              )}
+              {hits?.map((hit) => (
+                <button
+                  type="button"
+                  key={hit.sessionId}
+                  className={`dsh-wsr-row dsh-wsr-row--stack${hit.sessionId === sessions.current ? " dsh-wsr-row--active" : ""}`}
+                  onClick={() => openSession(hit.sessionId)}
+                >
+                  <span className="dsh-wsr-row__title">
+                    {sessions.byId[hit.sessionId]?.displayTitle ?? hit.sessionId}
+                  </span>
+                  {hit.snippet !== "" && <span className="dsh-wsr-row__snippet">{hit.snippet}</span>}
+                </button>
+              ))}
+            </>
+          )}
+
+          {pane.kind === "archive" && (
+            <>
+              {archivedRows.length === 0 && (
+                <div className="dsh-wsr-sessions__empty">没有归档的会话</div>
+              )}
+              {archivedRows.map((row) => (
+                <div
+                  key={row.id}
+                  className="dsh-wsr-row dsh-wsr-row--stack"
+                  title={row.displayTitle}
+                >
+                  <span className="dsh-wsr-row__title">{row.displayTitle}</span>
+                  <button
+                    type="button"
+                    className="dsh-wsr-row__restore"
+                    title="恢复到列表"
+                    aria-label={`恢复 ${row.displayTitle}`}
+                    onClick={() => void onUnarchive(row.id)}
+                  >
+                    恢复
+                  </button>
+                </div>
+              ))}
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -459,13 +856,21 @@ function Menu(props: MenuProps) {
 interface SessionMenuProps {
   menu: MenuState;
   onOpen(): void;
+  onRename(): void;
+  onCopyId(): void;
+  /** Present only when the Host build exposes pinning. */
+  onPin?(): void;
+  /** Present only when the Host build exposes pinning. */
+  onUnpin?(): void;
+  /** Whether this session is currently pinned. */
+  pinned: boolean;
   onArchive(): void;
 }
 
-/** The right-click menu for one session row: open it, or archive with feedback. */
+/** The right-click menu for one session row. */
 function SessionMenu(props: SessionMenuProps) {
   const x = Math.max(4, Math.min(props.menu.x, window.innerWidth - 166));
-  const y = Math.max(4, Math.min(props.menu.y, window.innerHeight - 77));
+  const y = Math.max(4, Math.min(props.menu.y, window.innerHeight - 197));
   return (
     <div
       className="dsh-wsr-menu"
@@ -476,6 +881,23 @@ function SessionMenu(props: SessionMenuProps) {
       <button type="button" className="dsh-wsr-menu__item" role="menuitem" onClick={props.onOpen}>
         <OpenIcon size={14} /> 打开
       </button>
+      <button type="button" className="dsh-wsr-menu__item" role="menuitem" onClick={props.onRename}>
+        <PencilIcon size={14} /> 重命名
+      </button>
+      <button type="button" className="dsh-wsr-menu__item" role="menuitem" onClick={props.onCopyId}>
+        <CopyIcon size={14} /> 复制会话 ID
+      </button>
+      {props.onPin !== undefined && props.onUnpin !== undefined && (
+        <button
+          type="button"
+          className="dsh-wsr-menu__item"
+          role="menuitem"
+          onClick={props.pinned ? props.onUnpin : props.onPin}
+        >
+          <PinIcon size={14} /> {props.pinned ? "取消置顶" : "置顶"}
+        </button>
+      )}
+      <div className="dsh-wsr-menu__sep" />
       <button
         type="button"
         className="dsh-wsr-menu__item dsh-wsr-menu__item--danger"

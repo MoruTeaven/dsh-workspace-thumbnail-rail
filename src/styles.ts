@@ -201,6 +201,40 @@ export const CSS = `
   color: var(--dsw-alias-label-primary, #1a1a1a);
 }
 
+/* The header's right-hand cluster: archive, search, new session. */
+.dsh-wsr-sessions__actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+}
+
+/* Search field in the session header, matching the row's own text metrics so
+   the header does not change height when the pane switches. */
+.dsh-wsr-search {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  box-sizing: border-box;
+  padding: 0 8px;
+  border: 0.5px solid var(--dsw-alias-border-l2, rgba(0, 0, 0, 0.14));
+  border-radius: var(--dsw-radius-sm, 8px);
+  background: var(--dsw-alias-interactive-bg-default, rgba(128, 128, 128, 0.08));
+  color: var(--dsw-alias-label-primary, #1a1a1a);
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.dsh-wsr-search:focus {
+  outline: none;
+  border-color: var(--dsw-alias-state-business-primary, #4f46e5);
+}
+
+.dsh-wsr-search::placeholder {
+  color: var(--dsw-alias-label-dimmed, #a0a0a0);
+}
+
 .dsh-wsr-sessions__scroll {
   flex: 1;
   min-height: 0;
@@ -260,6 +294,88 @@ export const CSS = `
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Pinned marker: quiet pin glyph ahead of the row's other leading icons. */
+.dsh-wsr-row__pin {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary, #81858c);
+}
+
+/* Inline rename draft: the row becomes a field, with the refusal beneath it. */
+.dsh-wsr-row--rename {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 3px;
+  height: auto;
+  min-height: 32px;
+  padding: 5px 4px;
+}
+
+.dsh-wsr-rename {
+  width: 100%;
+  height: 22px;
+  box-sizing: border-box;
+  padding: 0 6px;
+  border: 0.5px solid var(--dsw-alias-state-business-primary, #4f46e5);
+  border-radius: var(--dsw-radius-sm, 8px);
+  background: var(--dsw-alias-bg-base, #fff);
+  color: var(--dsw-alias-label-primary, #1a1a1a);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.dsh-wsr-rename:focus {
+  outline: none;
+}
+
+.dsh-wsr-rename__error {
+  padding: 0 2px;
+  font-size: 11px;
+  line-height: 15px;
+  color: var(--dsw-alias-state-error-primary, #dc2626);
+}
+
+/* Search hits and archive rows carry a second line, so they grow instead of
+   clipping: the interactive row sits above a muted detail line. */
+.dsh-wsr-row--stack {
+  height: auto;
+  min-height: 32px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  padding: 5px 8px;
+}
+
+.dsh-wsr-row__snippet {
+  display: block;
+  font-size: 11px;
+  line-height: 15px;
+  color: var(--dsw-alias-label-tertiary, #81858c);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Archive row's restore control: quiet text button, matching the row metrics. */
+.dsh-wsr-row__restore {
+  flex: none;
+  align-self: flex-start;
+  padding: 2px 7px;
+  border: 0.5px solid var(--dsw-alias-border-l2, rgba(0, 0, 0, 0.14));
+  border-radius: var(--dsw-radius-sm, 8px);
+  background: transparent;
+  color: var(--dsw-alias-label-secondary, #61666b);
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 16px;
+  cursor: pointer;
+}
+
+.dsh-wsr-row__restore:hover {
+  background: var(--dsw-alias-interactive-bg-hover, rgba(128, 128, 128, 0.12));
+  color: var(--dsw-alias-label-primary, #1a1a1a);
 }
 
 /* ── Context menu — styled after the Host's own dropdown (menu surface +

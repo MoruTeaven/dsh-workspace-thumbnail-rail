@@ -84,6 +84,49 @@ export const OpenIcon = (props: IconProps = {}) =>
     <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
   </>);
 
+/** Menu item: rename a session. */
+export const PencilIcon = (props: IconProps = {}) =>
+  base(props.size ?? 14, props, <>
+    <path d="M21.18 5.82a2 2 0 0 0-2.83 0L9 15.17l-3 7 7-3 9.18-9.18a2 2 0 0 0 0-2.83Z" />
+    <path d="m15 5 4 4" />
+  </>);
+
+/** Menu item: pin a session to the top of the list. */
+export const PinIcon = (props: IconProps = {}) =>
+  base(props.size ?? 14, props, <>
+    <path d="M12 17v5" />
+    <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1Z" />
+  </>);
+
+/** Menu item: copy a session id to the clipboard. */
+export const CopyIcon = (props: IconProps = {}) =>
+  base(props.size ?? 14, props, <>
+    <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+    <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+  </>);
+
+/** Menu item: search across every session's content. */
+export const SearchIcon = (props: IconProps = {}) =>
+  base(props.size ?? 14, props, <>
+    <circle cx="11" cy="11" r="7" />
+    <path d="m21 21-4.3-4.3" />
+  </>);
+
+/** Menu item: open the archived-session list. */
+export const ArchiveRestoreIcon = (props: IconProps = {}) =>
+  base(props.size ?? 14, props, <>
+    <path d="M3 12v9a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-9" />
+    <path d="M3 12 12 3l9 9" />
+    <path d="M12 3v13" />
+  </>);
+
+/** Menu item: leave the search or archive pane and go back to the list. */
+export const ArrowLeftIcon = (props: IconProps = {}) =>
+  base(props.size ?? 14, props, <>
+    <path d="m12 19-7-7 7-7" />
+    <path d="M19 12H5" />
+  </>);
+
 /** Menu item: archive a session. */
 export const ArchiveIcon = (props: IconProps = {}) =>
   base(props.size ?? 14, props, <>

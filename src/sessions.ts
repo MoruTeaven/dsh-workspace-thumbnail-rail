@@ -45,6 +45,33 @@ export function sessionsOfWorkspace(
 }
 
 /**
+ * Order rows so pinned ones lead, in the Host's own pin order.
+ *
+ * The pin set is registry-global and the Host surfaces it ahead of every
+ * unpinned session, so the rail mirrors that ordering instead of inventing its
+ * own. Within each group the incoming order is preserved, which is the
+ * newest-first order the caller already produced.
+ *
+ * Pin ids that are not among the rows (a pin belonging to another workspace, or
+ * one the list has not loaded yet) are ignored rather than pushing rows around.
+ *
+ * @param rows - the rows in their incoming display order.
+ * @param pinned - the Host's pin set, most recently pinned first.
+ * @returns a new array, pinned rows first, then the rest.
+ */
+export function orderWithPins(
+  rows: readonly SessionSummary[],
+  pinned: readonly string[],
+): SessionSummary[] {
+  if (pinned.length === 0) return [...rows];
+  const rank = (id: string) => {
+    const index = pinned.indexOf(id);
+    return index === -1 ? pinned.length : index;
+  };
+  return [...rows].sort((a, b) => rank(a.id) - rank(b.id));
+}
+
+/**
  * Which workspace the session column shows.
  *
  * A remembered selection wins, then the workspace owning the current session,
@@ -69,4 +96,26 @@ export function resolveSelectedWorkspace(
     if (owner !== undefined) return owner.workspaceId;
   }
   return workspaces[0]?.workspaceId;
+}
+
+/**
+ * Filter a workspace's session rows by a title query.
+ *
+ * Matching is case-insensitive substring matching on the display title: the
+ * rail's own filter runs over the list it already has, so it stays instant and
+ * works while the Host's content index is still loading. The Host's full-text
+ * search (`ctx.sessions.search`) is a separate, deeper surface that also looks
+ * inside message bodies; this one is only about the titles in front of the user.
+ *
+ * A blank query returns the rows unchanged, so the caller can pass the query
+ * straight through without a special case.
+ *
+ * @param rows - the rows to filter, in their display order.
+ * @param query - what the user typed; trimmed before matching.
+ * @returns the matching rows, same order.
+ */
+export function filterByTitle(rows: readonly SessionSummary[], query: string): SessionSummary[] {
+  const needle = query.trim().toLowerCase();
+  if (needle === "") return [...rows];
+  return rows.filter((row) => row.displayTitle.toLowerCase().includes(needle));
 }

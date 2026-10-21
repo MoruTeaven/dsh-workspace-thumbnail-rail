@@ -22,6 +22,8 @@ export interface WorkspaceView {
 export interface WorkspaceListState {
   items: readonly WorkspaceView[];
   archivedSessionIds: readonly string[];
+  /** Registry-global pin set, most recently pinned first. */
+  pinnedSessionIds: readonly string[];
   state: "idle" | "loading" | "error";
   baselinesReady: boolean;
   recentWorkspaceId: string | undefined;
@@ -42,6 +44,22 @@ export interface SessionListState {
   ids: string[];
   byId: Record<string, SessionSummary | undefined>;
   current: string | undefined;
+}
+
+/** One Host full-text search hit (ctx.sessions.search result item). */
+export interface SessionSearchHit {
+  /** Session the hit belongs to. */
+  sessionId: string;
+  /** Matched context around the hit; may be empty. */
+  snippet: string;
+}
+
+/** The outcome of a Host full-text search the rail requested. */
+export interface SessionSearchResult {
+  /** Hits in Host rank order, bounded by the Host's limit. */
+  items: SessionSearchHit[];
+  /** Whether the Host has more hits than it returned. */
+  hasMore: boolean;
 }
 
 /**
