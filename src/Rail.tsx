@@ -5,6 +5,7 @@ import {
   ArrowLeftIcon,
   CopyIcon,
   FolderIcon,
+  GitForkIcon,
   ImageIcon,
   ImageOffIcon,
   OpenIcon,
@@ -15,9 +16,10 @@ import {
   TrashIcon,
 } from "./icons";
 import { ThumbnailError, makeThumbnail } from "./image";
-import { filterByTitle, orderWithPins, resolveSelectedWorkspace, sessionsOfWorkspace } from "./sessions";
+import { filterByTitle, orderWithPins, resolveDropPosition, resolveSelectedWorkspace, sessionsOfWorkspace } from "./sessions";
 import { loadPrefs, loadThumbnails, savePrefs, saveThumbnails } from "./storage";
 import type {
+  DirectoryListing,
   RailPreferences,
   SessionListState,
   SessionSearchHit,
@@ -73,6 +75,32 @@ export interface RailActions {
   pinSession?: (sessionId: string) => Promise<void>;
   /** Remove a session's pin; undefined when the Host build lacks pinning. */
   unpinSession?: (sessionId: string) => Promise<void>;
+  /** Rename a workspace; a duplicate or blank title is refused by the Host. */
+  renameWorkspace: (workspaceId: string, title: string) => Promise<void>;
+  /**
+   * Fork a session from its latest completed turn.
+   *
+   * @returns the child session id.
+   */
+  forkSession: (sessionId: string) => Promise<string>;
+  /**
+   * Move one session before another within the same workspace.
+   *
+   * @param beforeSessionId - the row to land above; omitted appends to the tail.
+   */
+  reorderSessions: (
+    workspaceId: string,
+    sessionId: string,
+    beforeSessionId?: string,
+  ) => Promise<void>;
+  /** Open the Host-native directory picker; null when the operator cancels. */
+  pickDirectory: () => Promise<string | null | undefined>;
+  /** List one host directory level for the in-app browser; null on failure. */
+  browseDirectory: (path?: string, signal?: AbortSignal) => Promise<DirectoryListing | null>;
+  /** Create a child directory; the Host throws with its own reason. */
+  createDirectory: (path: string, name: string) => Promise<string>;
+  /** Register an existing path as a workspace and return its view. */
+  addWorkspace: (path: string) => Promise<WorkspaceView>;
 }
 
 /** Owner props the sidebar passes to this seat (contract/slots.ts:43-48). */
@@ -123,6 +151,39 @@ interface RenameState {
   error: string | null;
 }
 
+/** An open inline rename draft, for one workspace tile. */
+interface WorkspaceRenameState {
+  workspaceId: string;
+  /** The title the tile had when the draft opened. */
+  original: string;
+  /** What the user has typed so far. */
+  draft: string;
+  /** The Host's refusal, when the last submit failed. */
+  error: string | null;
+}
+
+/** A session row being dragged to a new position. */
+interface DragState {
+  /** The session under the pointer. */
+  sessionId: string;
+  /** Where the row will land. */
+  beforeSessionId: string | undefined;
+}
+
+/** The in-app directory browser used to add a workspace. */
+interface PickerState {
+  /** The listing being shown, or null while the first level loads. */
+  listing: DirectoryListing | null;
+  /** Why the listing cannot be shown. */
+  error: string | null;
+  /** The level being loaded, so a superseded reply can be dropped. */
+  loadingPath: string | undefined;
+  /** The "new folder" draft, when the operator asked for one. */
+  newFolder: string | null;
+  /** Whether a create is in flight. */
+  creating: boolean;
+}
+
 /** The browser root. */
 export function Rail({
   wide,
@@ -139,6 +200,13 @@ export function Rail({
   renameSession,
   pinSession,
   unpinSession,
+  renameWorkspace,
+  forkSession,
+  reorderSessions,
+  pickDirectory,
+  browseDirectory,
+  createDirectory,
+  addWorkspace,
 }: RailProps) {
   const workspaces = useWorkspaces((state) => state.items);
   const archived = useWorkspaces((state) => state.archivedSessionIds);
@@ -163,11 +231,19 @@ export function Rail({
   const [hits, setHits] = useState<SessionSearchHit[] | null>(null);
   const [renaming, setRenaming] = useState<RenameState | null>(null);
   const [renameBusy, setRenameBusy] = useState(false);
+  const [renamingWorkspace, setRenamingWorkspace] = useState<WorkspaceRenameState | null>(null);
+  const [workspaceRenameBusy, setWorkspaceRenameBusy] = useState(false);
+  /** The row being dragged, and where it will land. */
+  const [drag, setDrag] = useState<DragState | null>(null);
+  /** The add-workspace directory browser, when it is open. */
+  const [picker, setPicker] = useState<PickerState | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const pendingPickRef = useRef<string | null>(null);
   const searchAbortRef = useRef<AbortController | null>(null);
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  /** Aborts the picker's in-flight directory listing on navigation or close. */
+  const pickerAbortRef = useRef<AbortController | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   // Cross-page sync. The storage event fires in every page EXCEPT the writer,
@@ -439,6 +515,140 @@ export function Rail({
     }
   }, [notify, unpinSession]);
 
+  /** Fork a session; the Host names the child, so nothing is drafted here. */
+  const onForkSession = useCallback(async (sessionId: string) => {
+    try {
+      await forkSession(sessionId);
+      notify("已创建分支会话");
+    } catch {
+      notify("分支失败");
+    }
+  }, [forkSession, notify]);
+
+  /** Open the inline rename draft for one workspace tile. */
+  const startWorkspaceRename = useCallback((workspaceId: string, current: string) => {
+    setRenamingWorkspace({ workspaceId, original: current, draft: current, error: null });
+    setWorkspaceRenameBusy(false);
+  }, []);
+
+  /** Commit the workspace rename draft, keeping the draft open on a refusal. */
+  const submitWorkspaceRename = useCallback(async () => {
+    if (renamingWorkspace === null || workspaceRenameBusy) return;
+    const trimmed = renamingWorkspace.draft.trim();
+    // The Host refuses an empty title and a title another workspace already
+    // owns; checking both here keeps the draft from closing on a predictable
+    // refusal and spares a round trip.
+    if (trimmed === "" || trimmed === renamingWorkspace.original) {
+      setRenamingWorkspace(null);
+      return;
+    }
+    if (workspaces.some((item) => item.title === trimmed)) {
+      setRenamingWorkspace((current) => (current === null
+        ? null
+        : { ...current, error: "已存在同名工作区" }));
+      return;
+    }
+    setWorkspaceRenameBusy(true);
+    try {
+      await renameWorkspace(renamingWorkspace.workspaceId, trimmed);
+      setRenamingWorkspace(null);
+      setPrefs((current) => {
+        const next = { ...current };
+        if (next.selectedWorkspaceId === renamingWorkspace.workspaceId) {
+          next.selectedWorkspaceId = renamingWorkspace.workspaceId;
+        }
+        savePrefs(next);
+        return next;
+      });
+      notify("已重命名工作区");
+    } catch (error) {
+      setWorkspaceRenameBusy(false);
+      setRenamingWorkspace((current) => (current === null
+        ? null
+        : { ...current, error: error instanceof Error ? error.message : "重命名失败" }));
+    }
+  }, [renamingWorkspace, workspaceRenameBusy, renameWorkspace, workspaces, notify]);
+
+  /**
+   * Load one directory level into the picker.
+   *
+   * Each request aborts the one before it, so a slow level never overwrites a
+   * fast one the operator already navigated past. A failure keeps the picker
+   * open with the reason, because losing the operator's place over a refused
+   * read is worse than showing the error in place.
+   */
+  const loadPickerLevel = useCallback(async (path?: string) => {
+    pickerAbortRef.current?.abort();
+    const controller = new AbortController();
+    pickerAbortRef.current = controller;
+    setPicker((current) => (current === null
+      ? null
+      : { ...current, loadingPath: path, error: null }));
+    const listing = await browseDirectory(path, controller.signal);
+    if (controller.signal.aborted) return;
+    if (listing === null) {
+      setPicker((current) => (current === null
+        ? null
+        : { ...current, loadingPath: undefined, error: "无法读取该目录" }));
+      return;
+    }
+    setPicker((current) => (current === null
+      ? null
+      : { ...current, listing, error: null, loadingPath: undefined, newFolder: null }));
+  }, [browseDirectory]);
+
+  /** Close the add-workspace browser, dropping whatever it had loaded. */
+  const closePicker = useCallback(() => {
+    pickerAbortRef.current?.abort();
+    setPicker(null);
+  }, []);
+
+  /** Confirm the picker's current level as a new workspace. */
+  const confirmPicker = useCallback(async () => {
+    if (picker === null || picker.listing === null) return;
+    const path = picker.listing.path;
+    // Register first, then close: a refusal keeps the browser where it was, so
+    // the operator can pick a different directory instead of starting over.
+    try {
+      const created = await addWorkspace(path);
+      closePicker();
+      setPrefs((current) => {
+        const next = { ...current, selectedWorkspaceId: created.workspaceId };
+        savePrefs(next);
+        return next;
+      });
+      startWorkspace(created.workspaceId);
+    } catch (error) {
+      setPicker((current) => (current === null
+        ? null
+        : { ...current, error: error instanceof Error ? error.message : "添加工作区失败" }));
+    }
+  }, [picker, addWorkspace, closePicker, setPrefs, startWorkspace]);
+
+  /** Create a child directory inside the picker's current level. */
+  const submitNewFolder = useCallback(async () => {
+    if (picker === null || picker.listing === null) return;
+    const name = picker.newFolder?.trim() ?? "";
+    if (name === "") {
+      setPicker((current) => (current === null ? null : { ...current, newFolder: null }));
+      return;
+    }
+    setPicker((current) => (current === null ? null : { ...current, creating: true }));
+    try {
+      await createDirectory(picker.listing.path, name);
+      // Re-read the level so the new folder appears in its name-sorted place.
+      await loadPickerLevel(picker.listing.path);
+    } catch (error) {
+      setPicker((current) => (current === null
+        ? null
+        : {
+          ...current,
+          creating: false,
+          error: error instanceof Error ? error.message : "创建文件夹失败",
+        }));
+    }
+  }, [picker, createDirectory, loadPickerLevel]);
+
   /** Switch the session column between the workspace list, search and archive. */
   const showPane = useCallback((next: SessionPane) => {
     setPane(next);
@@ -479,6 +689,44 @@ export function Rail({
     }
   }, [renaming, renameBusy, renameSession, notify]);
 
+  /** Open the add-workspace browser on the Host's home directory. */
+  const openPicker = useCallback(() => {
+    setPicker({ listing: null, error: null, loadingPath: undefined, newFolder: null, creating: false });
+    void loadPickerLevel();
+  }, [loadPickerLevel]);
+
+  /**
+   * Position a drop inside one row.
+   *
+   * Pinned rows are not move anchors: their order is the Host's pin order, so
+   * inserting a session relative to one would be silently undone. A drop over a
+   * pinned row is therefore refused, and the drag position stays where it was.
+   */
+  const onRowDragOver = useCallback((event: React.DragEvent<HTMLButtonElement>, row: SessionSummary) => {
+    if (drag === null) return;
+    if (pinnedSet.has(row.id)) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const lowerHalf = event.clientY >= rect.top + rect.height / 2;
+    const next = resolveDropPosition(rows, drag.sessionId, row.id, lowerHalf);
+    if (next === null) return;
+    setDrag((current) => (current === null
+      || current.beforeSessionId === next.beforeSessionId
+      ? current
+      : { sessionId: current.sessionId, beforeSessionId: next.beforeSessionId }));
+  }, [drag, pinnedSet, rows]);
+
+  /** Commit a drop, then always clear the drag state. */
+  const onRowDrop = useCallback(async () => {
+    const pending = drag;
+    setDrag(null);
+    if (pending === null || selected === undefined) return;
+    try {
+      await reorderSessions(selected.workspaceId, pending.sessionId, pending.beforeSessionId);
+    } catch {
+      notify("调整顺序失败");
+    }
+  }, [drag, selected, reorderSessions, notify]);
+
   /** Render whichever context menu is open (workspace tile or session row). */
   const menuView = menu === null ? null : menu.target.kind === "workspace" ? (
     <Menu
@@ -487,6 +735,13 @@ export function Rail({
       onClose={() => setMenu(null)}
       onSet={() => { setMenu(null); pickFor((menu.target as { workspaceId: string }).workspaceId); }}
       onClear={() => { clearFor((menu.target as { workspaceId: string }).workspaceId); setMenu(null); }}
+      onRename={() => {
+        const workspaceId = (menu.target as { workspaceId: string }).workspaceId;
+        setMenu(null);
+        startWorkspaceRename(workspaceId, workspaces.find(
+          (item) => item.workspaceId === workspaceId,
+        )?.title ?? "");
+      }}
       onDelete={() => { setMenu(null); void onDeleteWorkspace((menu.target as { workspaceId: string }).workspaceId); }}
     />
   ) : (
@@ -499,6 +754,7 @@ export function Rail({
         showPane({ kind: "list" });
         startRename(sessionId, sessions.byId[sessionId]?.displayTitle ?? "");
       }}
+      onFork={() => { setMenu(null); void onForkSession((menu.target as { sessionId: string }).sessionId); }}
       onCopyId={() => { setMenu(null); void onCopySessionId((menu.target as { sessionId: string }).sessionId); }}
       onPin={pinSession === undefined ? undefined : () => {
         const sessionId = (menu.target as { sessionId: string }).sessionId;
@@ -526,6 +782,18 @@ export function Rail({
         onChange={onFileChosen}
       />
       {menuView}
+      {picker !== null && (
+        <Picker
+          picker={picker}
+          onNavigate={(path) => void loadPickerLevel(path)}
+          onNewFolderChange={(value) => setPicker(
+            (current) => (current === null ? null : { ...current, newFolder: value }),
+          )}
+          onNewFolderSubmit={() => void submitNewFolder()}
+          onConfirm={() => void confirmPicker()}
+          onClose={closePicker}
+        />
+      )}
       {toast !== null && <div className="dsh-wsr-toast">{toast}</div>}
     </>
   );
@@ -585,12 +853,61 @@ export function Rail({
 
       {columnWidth > 0 && (
         <div className="dsh-wsr-column" style={{ width: columnWidth }}>
+          <button
+            type="button"
+            className="dsh-wsr-column__add"
+            title="添加工作区"
+            aria-label="添加工作区"
+            onClick={() => {
+              if (picker !== null) {
+                closePicker();
+              } else {
+                openPicker();
+              }
+            }}
+          >
+            <PlusIcon size={14} />
+          </button>
           <div className="dsh-wsr-column__scroll">
             {workspaces.map((workspace) => (
-              <div className="dsh-wsr-tile-wrap" key={workspace.workspaceId}>
-                {tile(workspace, true)}
-                <span className="dsh-wsr-tile__label">{workspace.title}</span>
-              </div>
+              renamingWorkspace !== null && renamingWorkspace.workspaceId === workspace.workspaceId ? (
+                <div className="dsh-wsr-tile-wrap" key={workspace.workspaceId}>
+                  <span className="dsh-wsr-tile dsh-wsr-tile--ghost">
+                    <FolderIcon size={18} />
+                  </span>
+                  <input
+                    className="dsh-wsr-rename dsh-wsr-rename--tile"
+                    type="text"
+                    value={renamingWorkspace.draft}
+                    aria-label={`重命名 ${workspace.title}`}
+                    autoFocus
+                    disabled={workspaceRenameBusy}
+                    onChange={(e) => setRenamingWorkspace(
+                      (current) => (current === null
+                        ? null
+                        : { ...current, draft: e.target.value, error: null }),
+                    )}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        void submitWorkspaceRename();
+                      } else if (e.key === "Escape") {
+                        e.preventDefault();
+                        setRenamingWorkspace(null);
+                      }
+                    }}
+                    onBlur={() => void submitWorkspaceRename()}
+                  />
+                  {renamingWorkspace.error !== null && (
+                    <span className="dsh-wsr-tile__error">{renamingWorkspace.error}</span>
+                  )}
+                </div>
+              ) : (
+                <div className="dsh-wsr-tile-wrap" key={workspace.workspaceId}>
+                  {tile(workspace, true)}
+                  <span className="dsh-wsr-tile__label">{workspace.title}</span>
+                </div>
+              )
             ))}
           </div>
           {workspaces.length > 0 && (
@@ -728,9 +1045,42 @@ export function Rail({
                   <button
                     type="button"
                     key={row.id}
-                    className={`dsh-wsr-row${row.id === sessions.current ? " dsh-wsr-row--active" : ""}`}
+                    className={`dsh-wsr-row${
+                      row.id === sessions.current ? " dsh-wsr-row--active" : ""
+                    }${
+                      drag !== null && drag.sessionId === row.id ? " dsh-wsr-row--dragging" : ""
+                    }${
+                      drag !== null
+                        && drag.beforeSessionId === row.id
+                        && drag.sessionId !== row.id
+                        ? " dsh-wsr-row--drop-before" : ""
+                    }${
+                      drag !== null
+                        && drag.beforeSessionId === undefined
+                        && row.id === rows[rows.length - 1]?.id
+                        && drag.sessionId !== row.id
+                        ? " dsh-wsr-row--drop-after" : ""
+                    }`}
                     title={row.displayTitle}
+                    draggable={renaming === null}
                     onClick={() => openSession(row.id)}
+                    onDragStart={(e) => {
+                      if (renaming !== null) return;
+                      e.dataTransfer.effectAllowed = "move";
+                      setDrag({ sessionId: row.id, beforeSessionId: undefined });
+                    }}
+                    onDragOver={(e) => {
+                      if (drag === null) return;
+                      // preventDefault is what makes this element a drop target.
+                      e.preventDefault();
+                      e.dataTransfer.dropEffect = "move";
+                      onRowDragOver(e, row);
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      void onRowDrop();
+                    }}
+                    onDragEnd={() => setDrag(null)}
                     onContextMenu={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
@@ -817,13 +1167,14 @@ interface MenuProps {
   onClose(): void;
   onSet(): void;
   onClear(): void;
+  onRename(): void;
   onDelete(): void;
 }
 
 /** The right-click menu for one workspace tile. */
 function Menu(props: MenuProps) {
   const x = Math.max(4, Math.min(props.menu.x, window.innerWidth - 166));
-  const y = Math.max(4, Math.min(props.menu.y, window.innerHeight - 120));
+  const y = Math.max(4, Math.min(props.menu.y, window.innerHeight - 160));
   return (
     <div
       className="dsh-wsr-menu"
@@ -831,6 +1182,9 @@ function Menu(props: MenuProps) {
       onPointerDown={(e) => e.stopPropagation()}
       role="menu"
     >
+      <button type="button" className="dsh-wsr-menu__item" role="menuitem" onClick={props.onRename}>
+        <PencilIcon size={14} /> 重命名
+      </button>
       <button type="button" className="dsh-wsr-menu__item" role="menuitem" onClick={props.onSet}>
         <ImageIcon size={14} /> 设置缩略图
       </button>
@@ -852,12 +1206,145 @@ function Menu(props: MenuProps) {
   );
 }
 
+/** Props the add-workspace directory browser needs. */
+interface PickerProps {
+  picker: PickerState;
+  onNavigate(path: string): void;
+  onNewFolderChange(value: string): void;
+  onNewFolderSubmit(): void;
+  onConfirm(): void;
+  onClose(): void;
+}
+
+/**
+ * The in-app directory browser for adding a workspace.
+ *
+ * It renders the Host's own listing (`crumbs` + `entries`, both with absolute
+ * paths the client never has to join) so navigation is a crumb click or a row
+ * double-click, and the current level is what the confirm button registers.
+ *
+ * The Host's native picker remains the one-click path; this browser is for
+ * browsing into a nested directory without leaving the app.
+ */
+function Picker(props: PickerProps) {
+  const { listing, error, loadingPath, newFolder, creating } = props.picker;
+
+  // Close on Escape, matching every other dismissible surface in the rail.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") props.onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [props.onClose]);
+
+  return (
+    <div className="dsh-wsr-picker" role="dialog" aria-label="添加工作区">
+      <div className="dsh-wsr-picker__head">
+        <span className="dsh-wsr-picker__title">添加工作区</span>
+        <button
+          type="button"
+          className="dsh-wsr-picker__close"
+          aria-label="关闭"
+          onClick={props.onClose}
+        >
+          ×
+        </button>
+      </div>
+
+      <div className="dsh-wsr-picker__crumbs">
+        {listing?.crumbs.map((crumb) => (
+          <button
+            type="button"
+            key={crumb.path}
+            className={`dsh-wsr-picker__crumb${
+              listing.path === crumb.path ? " dsh-wsr-picker__crumb--current" : ""
+            }`}
+            onClick={() => props.onNavigate(crumb.path)}
+            title={crumb.path}
+          >
+            {crumb.name}
+          </button>
+        ))}
+      </div>
+
+      <div className="dsh-wsr-picker__body">
+        {listing === null && loadingPath !== undefined && (
+          <div className="dsh-wsr-picker__empty">读取中…</div>
+        )}
+        {listing !== null && listing.entries.length === 0 && (
+          <div className="dsh-wsr-picker__empty">没有子目录</div>
+        )}
+        {listing?.entries.map((entry) => (
+          <button
+            type="button"
+            key={entry.path}
+            className="dsh-wsr-picker__row"
+            onDoubleClick={() => props.onNavigate(entry.path)}
+            title={`${entry.name}\n${entry.path}`}
+          >
+            <FolderIcon size={14} />
+            <span className="dsh-wsr-picker__row-name">{entry.name}</span>
+          </button>
+        ))}
+      </div>
+
+      {listing?.truncated === true && (
+        <div className="dsh-wsr-picker__note">目录过多，仅显示前面一部分；请输入路径进入更深层级</div>
+      )}
+
+      <div className="dsh-wsr-picker__new">
+        <input
+          type="text"
+          className="dsh-wsr-search"
+          placeholder="新建文件夹名称"
+          aria-label="新建文件夹名称"
+          value={newFolder ?? ""}
+          disabled={creating}
+          onChange={(e) => props.onNewFolderChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              props.onNewFolderSubmit();
+            }
+          }}
+        />
+        <button
+          type="button"
+          className="dsh-wsr-picker__action"
+          disabled={creating || (newFolder ?? "").trim() === ""}
+          onClick={props.onNewFolderSubmit}
+        >
+          新建
+        </button>
+      </div>
+
+      {error !== null && <div className="dsh-wsr-picker__error">{error}</div>}
+
+      <div className="dsh-wsr-picker__foot">
+        <span className="dsh-wsr-picker__path" title={listing?.path}>
+          {listing?.path ?? ""}
+        </span>
+        <button
+          type="button"
+          className="dsh-wsr-picker__action dsh-wsr-picker__action--primary"
+          disabled={listing === null}
+          onClick={props.onConfirm}
+        >
+          选择此目录
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /** Props the session context menu needs. */
 interface SessionMenuProps {
   menu: MenuState;
   onOpen(): void;
   onRename(): void;
   onCopyId(): void;
+  onFork(): void;
   /** Present only when the Host build exposes pinning. */
   onPin?(): void;
   /** Present only when the Host build exposes pinning. */
@@ -870,7 +1357,7 @@ interface SessionMenuProps {
 /** The right-click menu for one session row. */
 function SessionMenu(props: SessionMenuProps) {
   const x = Math.max(4, Math.min(props.menu.x, window.innerWidth - 166));
-  const y = Math.max(4, Math.min(props.menu.y, window.innerHeight - 197));
+  const y = Math.max(4, Math.min(props.menu.y, window.innerHeight - 237));
   return (
     <div
       className="dsh-wsr-menu"
@@ -880,6 +1367,9 @@ function SessionMenu(props: SessionMenuProps) {
     >
       <button type="button" className="dsh-wsr-menu__item" role="menuitem" onClick={props.onOpen}>
         <OpenIcon size={14} /> 打开
+      </button>
+      <button type="button" className="dsh-wsr-menu__item" role="menuitem" onClick={props.onFork}>
+        <GitForkIcon size={14} /> 分支此会话
       </button>
       <button type="button" className="dsh-wsr-menu__item" role="menuitem" onClick={props.onRename}>
         <PencilIcon size={14} /> 重命名

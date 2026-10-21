@@ -105,6 +105,16 @@ export const CopyIcon = (props: IconProps = {}) =>
     <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
   </>);
 
+/** Menu item: fork a session into a new one. */
+export const GitForkIcon = (props: IconProps = {}) =>
+  base(props.size ?? 14, props, <>
+    <circle cx="12" cy="18" r="3" />
+    <circle cx="6" cy="6" r="3" />
+    <circle cx="18" cy="6" r="3" />
+    <path d="M18 9v1a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V9" />
+    <path d="M12 12v3" />
+  </>);
+
 /** Menu item: search across every session's content. */
 export const SearchIcon = (props: IconProps = {}) =>
   base(props.size ?? 14, props, <>

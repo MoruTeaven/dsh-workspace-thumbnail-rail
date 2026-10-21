@@ -1,6 +1,6 @@
 import { Rail, type RailActions } from "./Rail";
 import { injectStyles } from "./styles";
-import type { SessionSearchHit } from "./types";
+import type { DirectoryListing, SessionSearchHit, WorkspaceView } from "./types";
 
 /**
  * Browser-half plugin body.
@@ -48,6 +48,25 @@ interface UiWorkspaceFace {
   /** Archive a session, clearing it when it is the current selection. */
   archiveSession(sessionId: string): Promise<void>;
   /**
+   * Fork a session from its latest completed turn prefix.
+   *
+   * The child lands in the same workspace and inherits an incremented title, so
+   * the caller does not have to name it.
+   */
+  forkSession(sessionId: string, onCreated?: (childId: string) => void): Promise<string>;
+  /**
+   * Open the Host-native directory picker.
+   *
+   * The declared return is `string | null` (null when the operator cancels),
+   * while the shipped implementation resolves `result.value`; treating a
+   * missing value as a cancel covers both.
+   */
+  pickDirectory(): Promise<string | null | undefined>;
+  /** List one host directory level for the in-app browser. */
+  listDirectory(path?: string, signal?: AbortSignal): Promise<DirectoryListing>;
+  /** Create a child directory under `path`. */
+  createDirectory(path: string, name: string): Promise<string>;
+  /**
    * Pin a session to the top of every grouping surface.
    *
    * The Host's own UI calls this (`uiWorkspace.pinSession` in
@@ -61,9 +80,24 @@ interface UiWorkspaceFace {
 
 /** The workspace-controller face, narrowed to the calls this plugin needs. */
 interface WorkspaceFace {
+  /** Register an existing path as a workspace; idempotent for a known path. */
+  create(input: { path: string }): Promise<WorkspaceView>;
+  /** Rename a workspace. */
+  rename(workspaceId: string, title: string): Promise<WorkspaceView>;
   delete(workspaceId: string): Promise<void>;
   /** Restore an archived session to its recorded workspace position. */
   unarchiveSession(sessionId: string): Promise<void>;
+  /**
+   * Move a session within one workspace account.
+   *
+   * `beforeSessionId` omits to append, so the tail of the list is a real drop
+   * target rather than a special case in the caller.
+   */
+  insertSessionBefore(
+    workspaceId: string,
+    sessionId: string,
+    beforeSessionId?: string,
+  ): Promise<WorkspaceView>;
 }
 
 /** The sessions-service face, narrowed to what the rail needs. */
@@ -115,6 +149,35 @@ function apply(ctx: any) {
     removeWorkspace: (workspaceId) => workspaces.delete(workspaceId),
     archiveSession: (sessionId) => uiWorkspace.archiveSession(sessionId),
     unarchiveSession: (sessionId) => workspaces.unarchiveSession(sessionId),
+
+    renameWorkspace: async (workspaceId, title) => {
+      await workspaces.rename(workspaceId, title);
+    },
+    forkSession: (sessionId) => uiWorkspace.forkSession(sessionId),
+    reorderSessions: async (workspaceId, sessionId, beforeSessionId) => {
+      await workspaces.insertSessionBefore(workspaceId, sessionId, beforeSessionId);
+    },
+
+    // The add-workspace flow: the Host's native picker is the whole interaction,
+    // and a cancel is not an error — the caller gets null and does nothing.
+    pickDirectory: async () => {
+      try {
+        return await uiWorkspace.pickDirectory();
+      } catch {
+        return null;
+      }
+    },
+
+    browseDirectory: async (path, signal) => {
+      try {
+        return await uiWorkspace.listDirectory(path, signal);
+      } catch {
+        return null;
+      }
+    },
+
+    createDirectory: (path, name) => uiWorkspace.createDirectory(path, name),
+    addWorkspace: (path) => workspaces.create({ path }),
 
     // The Host's search answers a RemoteResult — success payload or business
     // error — so the rail unwraps it here rather than making Rail.tsx know the

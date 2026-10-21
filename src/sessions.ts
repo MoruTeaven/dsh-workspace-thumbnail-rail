@@ -72,6 +72,58 @@ export function orderWithPins(
 }
 
 /**
+ * Translate a drop into the `insertSessionBefore` arguments the Host wants.
+ *
+ * The Host's move API is anchor-based: a session lands *above* `beforeSessionId`,
+ * or is appended when the anchor is omitted. A pointer drop is a position, so
+ * the two halves of the hovered row map onto that form — the upper half means
+ * "above this row", the lower half means "above the row after it", which for the
+ * last row is the append case.
+ *
+ * A drop that does not move anything resolves to null, so the caller skips a
+ * pointless write. The test is stated as the move itself rather than as index
+ * arithmetic: simulate removing the dragged row, inserting it at the drop
+ * position, and compare with the order already on screen.
+ *
+ * @param rows - the rows in their current display order.
+ * @param sessionId - the row being dragged.
+ * @param targetId - the row the pointer is over.
+ * @param lowerHalf - true when the pointer sits in the target's lower half.
+ * @returns the move to apply, or null when nothing would change.
+ */
+export function resolveDropPosition(
+  rows: readonly SessionSummary[],
+  sessionId: string,
+  targetId: string,
+  lowerHalf: boolean,
+): { sessionId: string; beforeSessionId: string | undefined } | null {
+  if (sessionId === targetId) return null;
+  const targetIndex = rows.findIndex((row) => row.id === targetId);
+  const dragIndex = rows.findIndex((row) => row.id === sessionId);
+  if (targetIndex === -1 || dragIndex === -1) return null;
+
+  // Where the dragged row will sit, as an index into the list it leaves behind.
+  // The upper half of row i means "at i"; the lower half means "at i + 1", which
+  // past the end is the append case. Working in ids keeps the comparison honest.
+  const order = rows.map((row) => row.id);
+  const withoutDragged = order.filter((id) => id !== sessionId);
+  const insertIndex = lowerHalf ? targetIndex + 1 : targetIndex;
+  const moved = [
+    ...withoutDragged.slice(0, insertIndex),
+    sessionId,
+    ...withoutDragged.slice(insertIndex),
+  ];
+  // No reordering: the simulated move reproduces the order already on screen.
+  if (moved.length === order.length && moved.every((id, index) => id === order[index])) {
+    return null;
+  }
+
+  const anchor = order[insertIndex];
+  if (anchor === undefined) return { sessionId, beforeSessionId: undefined };
+  return { sessionId, beforeSessionId: anchor };
+}
+
+/**
  * Which workspace the session column shows.
  *
  * A remembered selection wins, then the workspace owning the current session,

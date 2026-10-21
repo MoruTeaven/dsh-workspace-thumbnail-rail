@@ -18,6 +18,10 @@ Give every workspace in DeepSeek Harness (DSH) a thumbnail image, and add a vert
 - **Copy session id**: right-click a row and choose 复制会话 ID.
 - **Pin a session**: right-click a row and choose 置顶 (shown only when the Host build supports it). Pinned sessions lead the list, matching the order the Host itself uses.
 - **Archive view**: the archive button in the session header lists archived sessions with a per-row restore.
+- **Rename a workspace**: right-click a tile and choose 重命名 to edit its title in place; a title another workspace already owns is refused.
+- **Fork a session**: right-click a row and choose 分支此会话 to branch from its latest completed turn.
+- **Reorder sessions**: drag a session row to a new position. Pinned rows do not take part, because their order is the Host's own pin order.
+- **Add a workspace**: the + button at the top of the workspace column opens a directory browser — breadcrumb navigation, a "new folder" field, and "选择此目录" to register it.
 
 ## Install
 

@@ -46,6 +46,27 @@ export const CSS = `
   border-right: 1px solid var(--dsw-alias-border-l1, rgba(0, 0, 0, 0.1));
 }
 
+/* "Add workspace": quiet icon control pinned above the tile list. */
+.dsh-wsr-column__add {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 28px;
+  margin: 6px 0 2px;
+  border: none;
+  border-radius: var(--dsw-radius-sm, 8px);
+  background: transparent;
+  color: var(--dsw-alias-label-secondary, #61666b);
+  cursor: pointer;
+}
+
+.dsh-wsr-column__add:hover {
+  background: var(--dsw-alias-interactive-bg-hover, rgba(128, 128, 128, 0.12));
+  color: var(--dsw-alias-label-primary, #1a1a1a);
+}
+
 .dsh-wsr-column__scroll {
   flex: 1;
   min-height: 0;
@@ -337,6 +358,44 @@ export const CSS = `
   color: var(--dsw-alias-state-error-primary, #dc2626);
 }
 
+/* The tile label slot hosts the tile's rename field, so it shares its width. */
+.dsh-wsr-rename--tile {
+  height: 20px;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 0 4px;
+  font-size: 10px;
+  line-height: 16px;
+  text-align: center;
+}
+
+/* Placeholder shown in place of a tile whose rename draft is open. */
+.dsh-wsr-tile--ghost {
+  cursor: default;
+  color: var(--dsw-alias-label-dimmed, #a0a0a0);
+}
+
+.dsh-wsr-tile__error {
+  font-size: 10px;
+  line-height: 13px;
+  color: var(--dsw-alias-state-error-primary, #dc2626);
+  text-align: center;
+}
+
+/* ── Drag reordering ── */
+.dsh-wsr-row--dragging {
+  opacity: 0.4;
+}
+
+/* Insertion markers: a rule above (before-anchor) or below (append) the row. */
+.dsh-wsr-row--drop-before {
+  box-shadow: inset 0 2px 0 0 var(--dsw-alias-state-business-primary, #4f46e5);
+}
+
+.dsh-wsr-row--drop-after {
+  box-shadow: inset 0 -2px 0 0 var(--dsw-alias-state-business-primary, #4f46e5);
+}
+
 /* Search hits and archive rows carry a second line, so they grow instead of
    clipping: the interactive row sits above a muted detail line. */
 .dsh-wsr-row--stack {
@@ -442,6 +501,208 @@ export const CSS = `
   font-size: 12px;
   font-family: var(--dsw-font-family, inherit);
   box-shadow: var(--dsw-shadow-lv2, 0 8px 28px rgba(0, 0, 0, 0.18));
+}
+
+/* ── Add-workspace directory browser ──
+   Same surface recipe as the context menu (hairline stroke, elevation shadow,
+   translucent blur) so it reads as part of the same family. */
+.dsh-wsr-picker {
+  position: fixed;
+  z-index: 100000;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 320px;
+  max-width: calc(100vw - 32px);
+  max-height: min(72vh, 520px);
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 12px;
+  box-sizing: border-box;
+  border: 0.5px solid var(--dsw-alias-border-l2, rgba(0, 0, 0, 0.14));
+  border-radius: var(--dsw-radius-lg, 16px);
+  background: color-mix(in srgb, var(--dsw-alias-bg-base, #fff) 94%, transparent);
+  box-shadow: var(--dsw-elevation-soft, 0 4px 16px rgba(0, 0, 0, 0.03), 0 0 24px rgba(0, 0, 0, 0.03));
+  backdrop-filter: var(--dsw-menu-backdrop-filter, blur(40px) saturate(150%));
+  -webkit-backdrop-filter: var(--dsw-menu-backdrop-filter, blur(40px) saturate(150%));
+  font-family: var(--dsw-font-family, inherit);
+}
+
+.dsh-wsr-picker__head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.dsh-wsr-picker__title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-primary, #1a1a1a);
+}
+
+.dsh-wsr-picker__close {
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: var(--dsw-radius-sm, 8px);
+  background: transparent;
+  color: var(--dsw-alias-label-secondary, #61666b);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.dsh-wsr-picker__close:hover {
+  background: var(--dsw-alias-interactive-bg-hover, rgba(128, 128, 128, 0.12));
+  color: var(--dsw-alias-label-primary, #1a1a1a);
+}
+
+/* Crumbs: a horizontally scrollable jump chain. */
+.dsh-wsr-picker__crumbs {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+  border-bottom: 1px solid var(--dsw-alias-border-l1, rgba(0, 0, 0, 0.08));
+}
+
+.dsh-wsr-picker__crumbs::-webkit-scrollbar {
+  display: none;
+}
+
+.dsh-wsr-picker__crumb {
+  flex: none;
+  padding: 2px 6px;
+  border: none;
+  border-radius: var(--dsw-radius-sm, 8px);
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary, #81858c);
+  font-family: inherit;
+  font-size: 11px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.dsh-wsr-picker__crumb:hover {
+  background: var(--dsw-alias-interactive-bg-hover, rgba(128, 128, 128, 0.12));
+  color: var(--dsw-alias-label-primary, #1a1a1a);
+}
+
+.dsh-wsr-picker__crumb--current {
+  color: var(--dsw-alias-label-primary, #1a1a1a);
+  font-weight: 600;
+}
+
+.dsh-wsr-picker__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.dsh-wsr-picker__row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  min-height: 28px;
+  box-sizing: border-box;
+  padding: 4px 7px;
+  border: none;
+  border-radius: var(--dsw-radius-sm, 8px);
+  background: transparent;
+  color: var(--dsw-alias-label-primary, #1a1a1a);
+  font-family: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dsh-wsr-picker__row:hover {
+  background: var(--dsw-alias-interactive-bg-hover, rgba(128, 128, 128, 0.12));
+}
+
+.dsh-wsr-picker__row-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dsh-wsr-picker__empty,
+.dsh-wsr-picker__note {
+  padding: 8px 4px;
+  font-size: 11px;
+  line-height: 15px;
+  color: var(--dsw-alias-label-dimmed, #a0a0a0);
+}
+
+.dsh-wsr-picker__new {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dsh-wsr-picker__error {
+  flex: none;
+  font-size: 11px;
+  line-height: 15px;
+  color: var(--dsw-alias-state-error-primary, #dc2626);
+}
+
+.dsh-wsr-picker__foot {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.dsh-wsr-picker__path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--dsw-alias-label-tertiary, #81858c);
+}
+
+.dsh-wsr-picker__action {
+  flex: none;
+  padding: 4px 11px;
+  border: 0.5px solid var(--dsw-alias-border-l2, rgba(0, 0, 0, 0.14));
+  border-radius: var(--dsw-radius-sm, 8px);
+  background: transparent;
+  color: var(--dsw-alias-label-primary, #1a1a1a);
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.dsh-wsr-picker__action:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover, rgba(128, 128, 128, 0.12));
+}
+
+.dsh-wsr-picker__action:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.dsh-wsr-picker__action--primary {
+  border-color: transparent;
+  background: var(--dsw-alias-state-business-primary, #4f46e5);
+  color: #fff;
 }
 `;
 

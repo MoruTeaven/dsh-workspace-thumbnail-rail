@@ -89,3 +89,27 @@ export interface RailPreferences {
   /** Workspace whose sessions the list column shows, restored across restarts. */
   selectedWorkspaceId?: string;
 }
+
+/** One row of the Host's directory listing (a child directory or a crumb). */
+export interface DirectoryEntry {
+  /** Base name shown in a browser row; a root crumb carries its full path. */
+  name: string;
+  /** Absolute host path — clients never join path segments themselves. */
+  path: string;
+  /** Hidden by the host platform's convention (dot-prefixed on POSIX). */
+  hidden: boolean;
+}
+
+/** One level of the Host's filesystem, as the add-workspace browser reads it. */
+export interface DirectoryListing {
+  /** The listed directory's absolute path. */
+  path: string;
+  /** The host account's home directory, rooting the crumb chain. */
+  home: string;
+  /** Ancestor chain from the filesystem root to `path` inclusive; jump targets. */
+  crumbs: DirectoryEntry[];
+  /** Direct child directories, name-sorted; symlinks to directories included. */
+  entries: DirectoryEntry[];
+  /** True when the backend cut `entries` at its bound; the tail is missing. */
+  truncated: boolean;
+}

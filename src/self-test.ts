@@ -21,7 +21,7 @@ const store = new Map<string, string>();
 } as unknown as Storage;
 
 const { DEFAULT_PREFS, loadPrefs, loadThumbnails, savePrefs, saveThumbnails } = await import("./storage.js");
-const { resolveSelectedWorkspace, sessionsOfWorkspace, filterByTitle, orderWithPins } = await import("./sessions.js");
+const { resolveSelectedWorkspace, sessionsOfWorkspace, filterByTitle, orderWithPins, resolveDropPosition } = await import("./sessions.js");
 type SessionList = import("./types.js").SessionListState;
 type SessionSummary = import("./types.js").SessionSummary;
 type Workspace = import("./types.js").WorkspaceView;
@@ -236,6 +236,55 @@ check("an empty pin set leaves the rows in the incoming order", () => {
 check("pin ids that are not on screen do not disturb the order", () => {
   const rows = [titled("a", "a", 1), titled("b", "b", 2)];
   assert.deepEqual(orderWithPins(rows, ["ghost", "b"]).map((r) => r.id), ["b", "a"]);
+});
+
+console.log("drop position");
+
+const four = () => [titled("a", "a", 4), titled("b", "b", 3), titled("c", "c", 2), titled("d", "d", 1)];
+
+/** The order the rows would end up in if this drop were applied. */
+function afterDrop(
+  rows: readonly SessionSummary[],
+  sessionId: string,
+  targetId: string,
+  lowerHalf: boolean,
+): string[] | null {
+  const drop = resolveDropPosition(rows, sessionId, targetId, lowerHalf);
+  if (drop === null) return null;
+  const moved = rows.filter((row) => row.id !== drop.sessionId);
+  if (drop.beforeSessionId === undefined) return [...moved.map((r) => r.id), drop.sessionId];
+  const at = moved.findIndex((row) => row.id === drop.beforeSessionId);
+  return [...moved.slice(0, at).map((r) => r.id), drop.sessionId, ...moved.slice(at).map((r) => r.id)];
+}
+
+check("upper half lands the row above the target", () => {
+  assert.deepEqual(afterDrop(four(), "d", "b", false), ["a", "d", "b", "c"]);
+});
+
+check("lower half lands the row below the target", () => {
+  assert.deepEqual(afterDrop(four(), "a", "b", true), ["b", "a", "c", "d"]);
+});
+
+check("the lower half of the last row appends", () => {
+  assert.deepEqual(afterDrop(four(), "a", "d", true), ["b", "c", "d", "a"]);
+});
+
+check("a drop that does not reorder is refused", () => {
+  // d already sits immediately below c, so dropping on its lower half — "above
+  // the row after c", i.e. above d itself — leaves the order alone.
+  assert.equal(resolveDropPosition(four(), "d", "c", true), null);
+  // Dropping on c's upper half does move d (it lands above c instead of below).
+  assert.deepEqual(afterDrop(four(), "d", "c", false), ["a", "b", "d", "c"]);
+});
+
+check("dropping a row onto itself is refused", () => {
+  assert.equal(resolveDropPosition(four(), "b", "b", false), null);
+  assert.equal(resolveDropPosition(four(), "b", "b", true), null);
+});
+
+check("an unknown target is refused", () => {
+  assert.equal(resolveDropPosition(four(), "a", "ghost", false), null);
+  assert.equal(resolveDropPosition(four(), "ghost", "b", false), null);
 });
 
 console.log("workspace selection");
