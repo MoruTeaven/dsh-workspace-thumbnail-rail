@@ -1,6 +1,6 @@
 # DSH 工作区缩略图栏
 
-[English](./README.md) | 简体中文
+[English](https://github.com/MoruTeaven/dsh-workspace-thumbnail-rail/blob/master/README.md) | 简体中文
 
 给 DeepSeek Harness（DSH）的每个工作区设置一张缩略图，并在侧栏与对话区之间加一条竖排的工作区缩略图栏——像 VS Code 那样，**左边是工作区，右边是对话**。
 
