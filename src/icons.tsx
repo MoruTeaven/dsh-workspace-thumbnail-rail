@@ -54,13 +54,6 @@ export const ImageOffIcon = (props: IconProps = {}) =>
     <path d="m2 2 20 20" />
   </>);
 
-/** Menu item: reset the workspace title back to its directory name. */
-export const RotateCcwIcon = (props: IconProps = {}) =>
-  base(props.size ?? 14, props, <>
-    <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-    <path d="M3 3v5h5" />
-  </>);
-
 /** Menu item: unregister the workspace from DSH (the directory is untouched). */
 export const TrashIcon = (props: IconProps = {}) =>
   base(props.size ?? 14, props, <>
@@ -69,7 +62,7 @@ export const TrashIcon = (props: IconProps = {}) =>
     <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
   </>);
 
-/** Menu item: move the rail itself. */
+/** Menu item and restore strip: hide or show the workspace column. */
 export const ColumnsIcon = (props: IconProps = {}) =>
   base(props.size ?? 14, props, <>
     <rect width="18" height="18" x="3" y="3" rx="2" />

@@ -3,6 +3,7 @@ import {
   ArchiveIcon,
   ArchiveRestoreIcon,
   ArrowLeftIcon,
+  ColumnsIcon,
   CopyIcon,
   FolderIcon,
   GitForkIcon,
@@ -15,9 +16,9 @@ import {
   SearchIcon,
   TrashIcon,
 } from "./icons";
-import { ThumbnailError, makeThumbnail } from "./image";
+import { ThumbnailError, acceptsImageFile, makeThumbnail } from "./image";
 import { filterByTitle, orderWithPins, resolveDropPosition, resolveSelectedWorkspace, sessionsOfWorkspace } from "./sessions";
-import { loadPrefs, loadThumbnails, savePrefs, saveThumbnails } from "./storage";
+import { MAX_RAIL_WIDTH, MIN_RAIL_WIDTH, loadPrefs, loadThumbnails, savePrefs, saveThumbnails } from "./storage";
 import type {
   DirectoryListing,
   RailPreferences,
@@ -116,10 +117,6 @@ export interface RailProps extends RailActions, RailOwnerProps {
   useWorkspaces: <T,>(selector: (state: WorkspaceListState) => T) => T;
   useSessions: <T,>(selector: (state: SessionListState) => T) => T;
 }
-
-/** Rail column geometry bounds, matching the storage clamp. */
-const MIN_RAIL_WIDTH = 56;
-const MAX_RAIL_WIDTH = 120;
 
 /** Milliseconds a transient message stays on screen. */
 const TOAST_MS = 2600;
@@ -237,6 +234,8 @@ export function Rail({
   const [drag, setDrag] = useState<DragState | null>(null);
   /** The add-workspace directory browser, when it is open. */
   const [picker, setPicker] = useState<PickerState | null>(null);
+  /** Workspace tile a file is currently hovering, so it can show a drop target. */
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const pendingPickRef = useRef<string | null>(null);
@@ -369,17 +368,13 @@ export function Rail({
     fileInputRef.current?.click();
   }, []);
 
-  /** Compress the chosen image and persist it. */
-  const onFileChosen = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const input = event.target;
-    const file = input.files?.[0];
-    // Read the pending id into a const: the narrowing must survive the await
-    // below, which a property access on a ref does not.
-    const workspaceId: string | undefined = pendingPickRef.current ?? undefined;
-    pendingPickRef.current = null;
-    input.value = "";
-    if (file === undefined || workspaceId === undefined) return;
-
+  /**
+   * Compress one image and persist it for one workspace.
+   *
+   * Shared by the two ways a user supplies an image — the file input and
+   * dropping a file on the tile — so both report the same failures.
+   */
+  const applyImage = useCallback(async (file: File, workspaceId: string) => {
     try {
       const record = await makeThumbnail(file);
       const next = { ...loadThumbnails(), [workspaceId]: record };
@@ -393,12 +388,49 @@ export function Rail({
     }
   }, [notify]);
 
+  /** Compress the file the input picked and persist it. */
+  const onFileChosen = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const input = event.target;
+    const file = input.files?.[0];
+    // Read the pending id into a const: the narrowing must survive the await
+    // below, which a property access on a ref does not.
+    const workspaceId: string | undefined = pendingPickRef.current ?? undefined;
+    pendingPickRef.current = null;
+    input.value = "";
+    if (file === undefined || workspaceId === undefined) return;
+    await applyImage(file, workspaceId);
+  }, [applyImage]);
+
+  /**
+   * Whether a drag carries files rather than one of the rail's own session rows.
+   *
+   * `dataTransfer.files` is empty during dragover for security reasons, so the
+   * type list is the only signal available before the drop.
+   */
+  const dragsFiles = (dataTransfer: DataTransfer) => Array.from(dataTransfer.types).includes("Files");
+
   /** Drop one workspace's thumbnail. */
   const clearFor = useCallback((workspaceId: string) => {
     const next = { ...loadThumbnails() };
     delete next[workspaceId];
     saveThumbnails(next);
     setThumbnails(next);
+  }, []);
+
+  /**
+   * Show or hide the workspace column.
+   *
+   * Persisted so the choice survives a reload. Hiding is only ever half the
+   * feature: a hidden column still has to be reachable again, which is what the
+   * restore strip in its place is for.
+   */
+  const setRailVisible = useCallback((visible: boolean) => {
+    setPrefs((current) => {
+      if (current.enabled === visible) return current;
+      const next = { ...current, enabled: visible };
+      savePrefs(next);
+      return next;
+    });
   }, []);
 
   /** Drag the column's inner edge to resize it. */
@@ -442,20 +474,29 @@ export function Rail({
     };
   }, [menu]);
 
+  /**
+   * Unregister one workspace.
+   *
+   * Its thumbnail and remembered selection are dropped only after the Host
+   * confirms the removal: a refusal leaves the workspace on screen, so wiping
+   * its thumbnail first would lose the image for a workspace that still exists.
+   */
   const onDeleteWorkspace = useCallback(async (workspaceId: string) => {
-    clearFor(workspaceId);
-    setPrefs((current) => {
-      const next = { ...current };
-      if (next.selectedWorkspaceId === workspaceId) delete next.selectedWorkspaceId;
-      savePrefs(next);
-      return next;
-    });
     try {
       await removeWorkspace(workspaceId);
     } catch {
       notify("移除工作区失败");
+      return;
     }
-  }, [clearFor, notify]);
+    clearFor(workspaceId);
+    setPrefs((current) => {
+      if (current.selectedWorkspaceId !== workspaceId) return current;
+      const next = { ...current };
+      delete next.selectedWorkspaceId;
+      savePrefs(next);
+      return next;
+    });
+  }, [clearFor, notify, removeWorkspace]);
 
   /**
    * Archive a session from its context menu, with visible feedback — the
@@ -552,14 +593,6 @@ export function Rail({
     try {
       await renameWorkspace(renamingWorkspace.workspaceId, trimmed);
       setRenamingWorkspace(null);
-      setPrefs((current) => {
-        const next = { ...current };
-        if (next.selectedWorkspaceId === renamingWorkspace.workspaceId) {
-          next.selectedWorkspaceId = renamingWorkspace.workspaceId;
-        }
-        savePrefs(next);
-        return next;
-      });
       notify("已重命名工作区");
     } catch (error) {
       setWorkspaceRenameBusy(false);
@@ -743,6 +776,7 @@ export function Rail({
         )?.title ?? "");
       }}
       onDelete={() => { setMenu(null); void onDeleteWorkspace((menu.target as { workspaceId: string }).workspaceId); }}
+      onHide={() => { setMenu(null); setRailVisible(false); }}
     />
   ) : (
     <SessionMenu
@@ -803,11 +837,14 @@ export function Rail({
     const thumb = thumbnails[workspace.workspaceId];
     const isActive = workspace.workspaceId === selectedId;
     const busy = workspace.sessionIds.some((id) => sessions.byId[id]?.running);
+    const dropping = dropTarget === workspace.workspaceId;
     return (
       <button
         type="button"
-        className={`dsh-wsr-tile${isActive ? " dsh-wsr-tile--active" : ""}`}
-        title={workspace.title}
+        className={`dsh-wsr-tile${isActive ? " dsh-wsr-tile--active" : ""}${
+          dropping ? " dsh-wsr-tile--drop" : ""
+        }`}
+        title={`${workspace.title}\n拖入图片可设为缩略图`}
         aria-label={workspace.title}
         aria-current={inColumn && isActive ? true : undefined}
         onClick={() => {
@@ -823,6 +860,29 @@ export function Rail({
             y: rect.top,
           });
         }}
+        onDragOver={(e) => {
+          // A file drag sets a thumbnail; the rail's own session-row drag must
+          // not light every tile up, so only file drags are accepted here.
+          if (!dragsFiles(e.dataTransfer)) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "copy";
+          if (!dropping) setDropTarget(workspace.workspaceId);
+        }}
+        onDragLeave={() => {
+          setDropTarget((current) => (current === workspace.workspaceId ? null : current));
+        }}
+        onDrop={(e) => {
+          if (!dragsFiles(e.dataTransfer)) return;
+          e.preventDefault();
+          setDropTarget(null);
+          const file = e.dataTransfer.files?.[0];
+          if (file === undefined) return;
+          if (!acceptsImageFile(file)) {
+            notify("请拖入一张图片文件");
+            return;
+          }
+          void applyImage(file, workspace.workspaceId);
+        }}
       >
         {thumb === undefined
           ? <FolderIcon size={18} />
@@ -832,43 +892,68 @@ export function Rail({
     );
   };
 
+  /** The single "add a workspace" control, mirrored in the column and the strip. */
+  const addWorkspaceButton = (label: string) => (
+    <button
+      type="button"
+      className="dsh-wsr-column__add"
+      title={label}
+      aria-label={label}
+      onClick={() => {
+        if (picker !== null) {
+          closePicker();
+        } else {
+          openPicker();
+        }
+      }}
+    >
+      <PlusIcon size={14} />
+    </button>
+  );
+
+  /**
+   * Swallow a file drag that misses a tile.
+   *
+   * Without this, dropping an image on the rail's padding would make the
+   * browser navigate to the file and replace the whole app window.
+   */
+  const dropGuard = {
+    onDragOver: (event: React.DragEvent<HTMLDivElement>) => {
+      if (dragsFiles(event.dataTransfer)) event.preventDefault();
+    },
+    onDrop: (event: React.DragEvent<HTMLDivElement>) => {
+      if (!dragsFiles(event.dataTransfer)) return;
+      event.preventDefault();
+      setDropTarget(null);
+    },
+  };
+
   if (!wide) {
     // Collapsed sidebar: the same thumbnails as an icon column, the affordance
-    // the Host's own browser gives its session list.
+    // the Host's own browser gives its session list. The add control rides
+    // along, because this column is the only workspace surface in that state.
     return (
-      <div className="dsh-wsr-browser dsh-wsr-browser--rail">
+      <div className="dsh-wsr-browser dsh-wsr-browser--rail" {...dropGuard}>
         {chrome}
         <div className="dsh-wsr-browser__rail-scroll">
           {workspaces.map((workspace) => tile(workspace, false))}
         </div>
+        {addWorkspaceButton("添加工作区")}
       </div>
     );
   }
 
-  const columnWidth = prefs.enabled ? prefs.width : 0;
-
   return (
-    <div className="dsh-wsr-browser">
+    <div className="dsh-wsr-browser" {...dropGuard}>
       {chrome}
 
-      {columnWidth > 0 && (
-        <div className="dsh-wsr-column" style={{ width: columnWidth }}>
-          <button
-            type="button"
-            className="dsh-wsr-column__add"
-            title="添加工作区"
-            aria-label="添加工作区"
-            onClick={() => {
-              if (picker !== null) {
-                closePicker();
-              } else {
-                openPicker();
-              }
-            }}
-          >
-            <PlusIcon size={14} />
-          </button>
+      {prefs.enabled ? (
+        <div className="dsh-wsr-column" style={{ width: prefs.width }}>
+          {addWorkspaceButton("添加工作区")}
           <div className="dsh-wsr-column__scroll">
+            {workspaces.length === 0 && (
+              <div className="dsh-wsr-column__empty">点上方「+」添加工作区</div>
+            )}
             {workspaces.map((workspace) => (
               renamingWorkspace !== null && renamingWorkspace.workspaceId === workspace.workspaceId ? (
                 <div className="dsh-wsr-tile-wrap" key={workspace.workspaceId}>
@@ -918,6 +1003,21 @@ export function Rail({
               aria-label="调整缩略图列宽度"
             />
           )}
+        </div>
+      ) : (
+        // Hidden column: a slim strip keeps both ways back — restore and add —
+        // reachable, instead of leaving a hidden rail with no entry point.
+        <div className="dsh-wsr-strip">
+          <button
+            type="button"
+            className="dsh-wsr-column__add"
+            title="显示工作区栏"
+            aria-label="显示工作区栏"
+            onClick={() => setRailVisible(true)}
+          >
+            <ColumnsIcon size={14} />
+          </button>
+          {addWorkspaceButton("添加工作区")}
         </div>
       )}
 
@@ -1169,12 +1269,14 @@ interface MenuProps {
   onClear(): void;
   onRename(): void;
   onDelete(): void;
+  /** Collapse the workspace column; the restore strip takes its place. */
+  onHide(): void;
 }
 
 /** The right-click menu for one workspace tile. */
 function Menu(props: MenuProps) {
   const x = Math.max(4, Math.min(props.menu.x, window.innerWidth - 166));
-  const y = Math.max(4, Math.min(props.menu.y, window.innerHeight - 160));
+  const y = Math.max(4, Math.min(props.menu.y, window.innerHeight - 200));
   return (
     <div
       className="dsh-wsr-menu"
@@ -1193,6 +1295,9 @@ function Menu(props: MenuProps) {
           <ImageOffIcon size={14} /> 移除缩略图
         </button>
       )}
+      <button type="button" className="dsh-wsr-menu__item" role="menuitem" onClick={props.onHide}>
+        <ColumnsIcon size={14} /> 隐藏工作区栏
+      </button>
       <div className="dsh-wsr-menu__sep" />
       <button
         type="button"

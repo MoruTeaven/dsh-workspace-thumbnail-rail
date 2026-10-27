@@ -80,8 +80,34 @@ export const CSS = `
   padding: 8px 6px;
 }
 
+/* Empty registry: say what the "+" above is for. */
+.dsh-wsr-column__empty {
+  padding: 12px 4px;
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: center;
+  color: var(--dsw-alias-label-tertiary, #8e8e8e);
+}
+
 .dsh-wsr-column__scroll::-webkit-scrollbar {
   display: none;
+}
+
+/* Hidden column: a slim strip that still offers restore and add. */
+.dsh-wsr-strip {
+  flex: none;
+  width: 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 0;
+  border-right: 1px solid var(--dsw-alias-border-l1, rgba(0, 0, 0, 0.1));
+}
+
+.dsh-wsr-strip .dsh-wsr-column__add {
+  width: 24px;
+  margin: 0;
 }
 
 .dsh-wsr-tile-wrap {
@@ -120,6 +146,13 @@ export const CSS = `
   border-color: var(--dsw-alias-state-business-primary, #4f46e5);
   color: var(--dsw-alias-state-business-primary, #4f46e5);
   background: color-mix(in srgb, var(--dsw-alias-state-business-primary, #4f46e5) 12%, transparent);
+}
+
+/* An image is hovering this tile: show it as the drop target it is. */
+.dsh-wsr-tile--drop {
+  border-color: var(--dsw-alias-state-business-primary, #4f46e5);
+  border-style: dashed;
+  background: color-mix(in srgb, var(--dsw-alias-state-business-primary, #4f46e5) 18%, transparent);
 }
 
 .dsh-wsr-tile__img {

@@ -6,11 +6,12 @@ Give every workspace in DeepSeek Harness (DSH) a thumbnail image, and add a vert
 
 ## Features
 
-- **Per-workspace thumbnails**: right-click any workspace tile and pick a local image; it is centre-cropped to a square and compressed automatically.
+- **Per-workspace thumbnails**: right-click any workspace tile and pick a local image, or drop an image file straight onto the tile; it is centre-cropped to a square and compressed automatically.
 - **Vertical rail**: every workspace is listed in a column between the sidebar and the conversation, matching VS Code's explorer layout.
 - **Click to switch**: clicking a thumbnail opens that workspace's conversation.
-- **Context menu**: set / remove a thumbnail, remove the workspace, hide the rail.
-- **Resizable**: drag the handle at the bottom of the rail to change its width, or hide the rail entirely.
+- **Context menu**: rename, set / remove a thumbnail, hide the rail, remove the workspace.
+- **Resizable**: drag the handle at the bottom of the rail to change its width.
+- **Hide and restore**: hiding the rail leaves a slim strip with restore and add-workspace buttons, so a hidden rail is never out of reach.
 - **Cross-tab sync**: set a thumbnail in one tab and every other open DSH tab updates immediately.
 - **Session title filter**: typing in the session header filters the list instantly by title, without a round trip.
 - **Content search**: the search button in the session header runs the Host's own message-content index, so you find sessions by what was said inside them, not just by title. Results show a snippet; click one to open it.
@@ -33,7 +34,7 @@ pnpm run build
 ## Use
 
 1. Right-click any workspace tile in the rail.
-2. Choose "设置缩略图" and pick an image.
+2. Choose "设置缩略图" and pick an image, or drag an image file onto the tile.
 3. The image is centre-cropped to a 128×128 thumbnail and saved; workspaces without one show a folder icon.
 
 ## Development

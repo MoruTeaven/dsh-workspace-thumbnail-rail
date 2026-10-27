@@ -20,7 +20,8 @@ const store = new Map<string, string>();
   length: 0,
 } as unknown as Storage;
 
-const { DEFAULT_PREFS, loadPrefs, loadThumbnails, savePrefs, saveThumbnails } = await import("./storage.js");
+const { DEFAULT_PREFS, MAX_RAIL_WIDTH, MIN_RAIL_WIDTH, clampRailWidth, loadPrefs, loadThumbnails, savePrefs, saveThumbnails } = await import("./storage.js");
+const { acceptsImageFile } = await import("./image.js");
 const { resolveSelectedWorkspace, sessionsOfWorkspace, filterByTitle, orderWithPins, resolveDropPosition } = await import("./sessions.js");
 type SessionList = import("./types.js").SessionListState;
 type SessionSummary = import("./types.js").SessionSummary;
@@ -82,14 +83,36 @@ check("round-trips preferences", () => {
 
 check("clamps an out-of-range width", () => {
   store.set("dsh.wsr.prefs.v1", JSON.stringify({ width: 9999, enabled: true }));
-  assert.equal(loadPrefs().width, 160);
+  assert.equal(loadPrefs().width, MAX_RAIL_WIDTH);
   store.set("dsh.wsr.prefs.v1", JSON.stringify({ width: 1, enabled: true }));
-  assert.equal(loadPrefs().width, 48);
+  assert.equal(loadPrefs().width, MIN_RAIL_WIDTH);
+});
+
+check("keeps the column wide enough for a tile plus its padding", () => {
+  // 44px tile + 6px padding each side: below 56 the tile would be clipped.
+  assert.equal(MIN_RAIL_WIDTH, 56);
+  assert.equal(clampRailWidth(0), MIN_RAIL_WIDTH);
+  assert.equal(clampRailWidth(72), 72);
+  assert.equal(clampRailWidth(1000), MAX_RAIL_WIDTH);
+  assert.equal(clampRailWidth(Number.NaN), DEFAULT_PREFS.width);
 });
 
 check("falls back on a non-numeric width", () => {
   store.set("dsh.wsr.prefs.v1", JSON.stringify({ width: "wide", enabled: "yes" }));
   assert.deepEqual(loadPrefs(), { width: 72, enabled: true });
+});
+
+console.log("image input");
+
+check("accepts a file the browser types as an image", () => {
+  assert.equal(acceptsImageFile({ type: "image/png" }), true);
+  assert.equal(acceptsImageFile({ type: "image/webp" }), true);
+});
+
+check("refuses a file that is not an image", () => {
+  assert.equal(acceptsImageFile({ type: "text/plain" }), false);
+  assert.equal(acceptsImageFile({ type: "" }), false);
+  assert.equal(acceptsImageFile({ type: "application/pdf" }), false);
 });
 
 console.log("session projection");

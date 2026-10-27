@@ -75,15 +75,27 @@ export function saveThumbnails(map: ThumbnailMap): boolean {
 /** Default preferences: a 72px rail, shown. */
 export const DEFAULT_PREFS: RailPreferences = { width: 72, enabled: true };
 
-/** Clamp the persisted width into a range the frame can always accommodate. */
-const MIN_WIDTH = 48;
-const MAX_WIDTH = 160;
+/**
+ * The rail column's width bounds, in px.
+ *
+ * Exported because the resize handle clamps against the same numbers: two
+ * private copies drifted before (48–160 in storage, 56–120 in the drag), which
+ * let a stored width clip the 44px tile plus its 6px inner padding.
+ */
+export const MIN_RAIL_WIDTH = 56;
+export const MAX_RAIL_WIDTH = 120;
+
+/** Clamp a width into the range the column can actually render. */
+export function clampRailWidth(width: number): number {
+  if (!Number.isFinite(width)) return DEFAULT_PREFS.width;
+  return Math.min(MAX_RAIL_WIDTH, Math.max(MIN_RAIL_WIDTH, Math.round(width)));
+}
 
 /** Load rail preferences, clamping a corrupt or out-of-range width back into range. */
 export function loadPrefs(): RailPreferences {
   const raw = readJson<Partial<RailPreferences>>(PREFS_KEY, {});
-  const width = typeof raw.width === "number" && Number.isFinite(raw.width)
-    ? Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, Math.round(raw.width)))
+  const width = typeof raw.width === "number"
+    ? clampRailWidth(raw.width)
     : DEFAULT_PREFS.width;
   const prefs: RailPreferences = {
     width,
