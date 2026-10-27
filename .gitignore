@@ -1,6 +1,9 @@
 node_modules/
 lib/
 *.tsbuildinfo
+
+# pnpm test 的 self-test 临时产物（与构建产物 lib/ 解耦，干净签出可直接跑）
+.tmp/
 .DS_Store
 # Windows system cache artifacts
 %SystemDrive%/
