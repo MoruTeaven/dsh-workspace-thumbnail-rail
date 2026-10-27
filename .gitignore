@@ -16,3 +16,9 @@ lib/
 # Mnemon runtime
 .mnemon/
 .npmrc
+
+# 任务 worktree 镜像目录（隔离运行，不进主仓库）
+.dsh-worktrees/
+
+# pnpm 本地 store 缓存
+.pnpm-store/
