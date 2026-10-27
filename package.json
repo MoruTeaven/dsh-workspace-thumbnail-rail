@@ -31,7 +31,9 @@
     "prepare": "node esbuild.config.mjs",
     "typecheck": "tsc --noEmit",
     "test:unit": "esbuild src/self-test.ts --bundle --format=esm --platform=node --outfile=lib/self-test.mjs && node lib/self-test.mjs",
-    "test": "pnpm run typecheck && pnpm run test:unit"
+    "test": "pnpm run typecheck && pnpm run test:unit",
+    "npm:doctor": "node scripts/npm-publish-doctor.mjs",
+    "npm:credentials:rename": "node scripts/rename-npm-credentials.mjs"
   },
   "files": [
     "lib/client.js",
