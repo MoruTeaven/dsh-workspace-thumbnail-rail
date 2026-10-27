@@ -27,14 +27,20 @@ npm 只会给一个含糊的 `403`，不会告诉你"你拿错渠道了"——�
 ### 旧命名的处置
 
 `NPM/MORUTEAVEN`（env `DSH_NPM_MORUTEAVEN_*`）**已弃用**，其值实为 npmjs.org 侧身份，
-现已并入 `NPM/NPMJS_ORG_MORUTEAVEN`。迁移用脚本完成：
+现已并入 `NPM/NPMJS_ORG_MORUTEAVEN`。迁移分两步完成：
 
 ```bash
-node scripts/rename-npm-credentials.mjs          # 先看变更（dry-run）
-node scripts/rename-npm-credentials.mjs --write  # 确认后写入（自动备份 keys.json）
+# 1. 旧命名按渠道拆分（dry-run 先看，再 --write 落盘，自动备份、幂等）
+node scripts/rename-npm-credentials.mjs
+node scripts/rename-npm-credentials.mjs --write
+
+# 2. 把 ~/.npmrc 里在用的阿里云凭证录入面板的 ALIYUN_PACKAGES 槽位
+#    （只建空 account 不够用，凭证必须在面板里成对可见才算"能一眼选对"）
+node scripts/import-aliyun-credential.mjs
+node scripts/import-aliyun-credential.mjs --write
 ```
 
-脚本只改变量名与说明文字，**凭证值原样保留**；幂等，可以反复执行。
+两个脚本都只改变量名/分组/说明，**凭证值原样保留**，且幂等，可以反复执行。
 改名后新变量在**下一个会话**才注入，当前会话仍持有旧变量名——这是 key_panel 的注入时机决定的。
 
 ## 发布前预检（务必跑）
@@ -83,5 +89,18 @@ npm publish                                         # 再发布
 ## 相关文件
 
 - [`scripts/npm-channels.mjs`](../scripts/npm-channels.mjs) —— 渠道与命名的唯一真相源
-- [`scripts/rename-npm-credentials.mjs`](../scripts/rename-npm-credentials.mjs) —— 旧命名迁移（dry-run 默认）
+- [`scripts/rename-npm-credentials.mjs`](../scripts/rename-npm-credentials.mjs) —— 旧命名按渠道拆分（dry-run 默认）
+- [`scripts/import-aliyun-credential.mjs`](../scripts/import-aliyun-credential.mjs) —— 从 `~/.npmrc` 录入阿里云凭证（dry-run 默认）
 - [`scripts/npm-publish-doctor.mjs`](../scripts/npm-publish-doctor.mjs) —— 发布前预检
+
+## 实测验证矩阵
+
+用新命名的两组变量逐一互打，确认它们确实是两套独立身份（这张表就是"拿错会 403"的证据）：
+
+| 用哪套凭证 | 打 npmjs.org `/-/whoami` | 打阿里云仓库包元数据 |
+| --- | --- | --- |
+| `DSH_NPM_NPMJS_ORG_MORUTEAVEN_KEY` | **200** `{"username":"moruteaven"}` | **403**（无权限） |
+| `DSH_NPM_ALIYUN_PACKAGES_KEY` | **401**（未认证） | **200**（读到元数据） |
+
+阿里云侧的写权限已用真实 `npm publish` 探测过：新命名的阿里云凭证能走到「版本已存在」这一步，
+说明权限本身是通的（详见上文两种 403 的区别）。

@@ -33,7 +33,8 @@
     "test:unit": "esbuild src/self-test.ts --bundle --format=esm --platform=node --outfile=lib/self-test.mjs && node lib/self-test.mjs",
     "test": "pnpm run typecheck && pnpm run test:unit",
     "npm:doctor": "node scripts/npm-publish-doctor.mjs",
-    "npm:credentials:rename": "node scripts/rename-npm-credentials.mjs"
+    "npm:credentials:rename": "node scripts/rename-npm-credentials.mjs",
+    "npm:credentials:import-aliyun": "node scripts/import-aliyun-credential.mjs"
   },
   "files": [
     "lib/client.js",
