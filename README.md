@@ -36,6 +36,16 @@ pnpm run build
 2. Choose "设置缩略图" and pick an image.
 3. The image is centre-cropped to a 128×128 thumbnail and saved; workspaces without one show a folder icon.
 
+## Development
+
+Run the publish preflight before publishing, so the registry and the credentials you hold belong to the same channel:
+
+```bash
+pnpm run npm:doctor -- --channel ALIYUN_PACKAGES
+```
+
+npmjs.org and the Aliyun private registry are two distinct identities that never share credentials. Naming rules and troubleshooting: [npm credentials](https://github.com/MoruTeaven/dsh-workspace-thumbnail-rail/blob/master/docs/npm-credentials.md).
+
 ## Notes
 
 - Thumbnails are stored in the browser's local storage and never uploaded.

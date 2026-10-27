@@ -37,6 +37,17 @@ pnpm run build
 2. 选择「设置缩略图」，在弹出的文件选择器中挑一张图片。
 3. 图片会被居中裁剪成 128×128 的缩略图并保存；未设置缩略图的工作区显示文件夹图标。
 
+## 开发
+
+发布到 npm 前先跑预检，确认 registry 与凭证是同一渠道：
+
+```bash
+pnpm run npm:doctor -- --channel ALIYUN_PACKAGES
+```
+
+两条渠道（npmjs.org 与阿里云雲效）是两套互不通用的身份，命名与排查方法见
+[npm 发布凭证](https://github.com/MoruTeaven/dsh-workspace-thumbnail-rail/blob/master/docs/npm-credentials.md)。
+
 ## 说明
 
 - 缩略图保存在浏览器的本地存储中，不上传到任何服务器。
