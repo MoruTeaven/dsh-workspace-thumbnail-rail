@@ -1,4 +1,4 @@
-import type { ThumbnailRecord } from "./types";
+﻿import type { ThumbnailRecord } from "./types";
 
 /**
  * Browser-side image pipeline: a user-picked file becomes a small square data
@@ -96,16 +96,6 @@ function drawCentreSquare(source: HTMLImageElement, size: number): HTMLCanvasEle
 }
 
 /**
- * Whether a picked or dropped file is something this pipeline will try to decode.
- *
- * Both entry points (the file input and dropping an image on a tile) gate on
- * this, so the two cannot disagree about what counts as an image.
- */
-export function acceptsImageFile(file: { type: string }): boolean {
-  return typeof file.type === "string" && file.type.startsWith("image/");
-}
-
-/**
  * Compress a picked image file into a square thumbnail record.
  *
  * @param file - the image the user picked (any format the browser can decode).
@@ -117,7 +107,7 @@ export async function makeThumbnail(file: File): Promise<ThumbnailRecord> {
   if (file.size > MAX_INPUT_BYTES) {
     throw new ThumbnailError("图片太大，请选择 20 MB 以内的图片");
   }
-  if (!acceptsImageFile(file)) {
+  if (!file.type.startsWith("image/")) {
     throw new ThumbnailError("请选择一张图片文件");
   }
 

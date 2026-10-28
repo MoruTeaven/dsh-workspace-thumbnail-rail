@@ -1,4 +1,4 @@
-/** Minimal inline SVG icons — paths from Lucide (ISC license, https://lucide.dev). */
+﻿/** Minimal inline SVG icons — paths from Lucide (ISC license, https://lucide.dev). */
 import type { ReactNode } from "react";
 
 interface IconProps {
@@ -32,13 +32,6 @@ export const FolderIcon = (props: IconProps = {}) =>
     <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
   </>);
 
-/** Session list header: start a new session in this workspace. */
-export const PlusIcon = (props: IconProps = {}) =>
-  base(props.size ?? 14, props, <>
-    <path d="M5 12h14" />
-    <path d="M12 5v14" />
-  </>);
-
 /** Menu item: choose a thumbnail image for this workspace. */
 export const ImageIcon = (props: IconProps = {}) =>
   base(props.size ?? 14, props, <>
@@ -54,6 +47,13 @@ export const ImageOffIcon = (props: IconProps = {}) =>
     <path d="m2 2 20 20" />
   </>);
 
+/** Menu item: reset the workspace title back to its directory name. */
+export const RotateCcwIcon = (props: IconProps = {}) =>
+  base(props.size ?? 14, props, <>
+    <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+    <path d="M3 3v5h5" />
+  </>);
+
 /** Menu item: unregister the workspace from DSH (the directory is untouched). */
 export const TrashIcon = (props: IconProps = {}) =>
   base(props.size ?? 14, props, <>
@@ -62,78 +62,9 @@ export const TrashIcon = (props: IconProps = {}) =>
     <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
   </>);
 
-/** Menu item and restore strip: hide or show the workspace column. */
+/** Menu item: move the rail itself. */
 export const ColumnsIcon = (props: IconProps = {}) =>
   base(props.size ?? 14, props, <>
     <rect width="18" height="18" x="3" y="3" rx="2" />
     <path d="M9 3v18" />
-  </>);
-
-/** Menu item: open a session. */
-export const OpenIcon = (props: IconProps = {}) =>
-  base(props.size ?? 14, props, <>
-    <path d="M15 3h6v6" />
-    <path d="M10 14 21 3" />
-    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-  </>);
-
-/** Menu item: rename a session. */
-export const PencilIcon = (props: IconProps = {}) =>
-  base(props.size ?? 14, props, <>
-    <path d="M21.18 5.82a2 2 0 0 0-2.83 0L9 15.17l-3 7 7-3 9.18-9.18a2 2 0 0 0 0-2.83Z" />
-    <path d="m15 5 4 4" />
-  </>);
-
-/** Menu item: pin a session to the top of the list. */
-export const PinIcon = (props: IconProps = {}) =>
-  base(props.size ?? 14, props, <>
-    <path d="M12 17v5" />
-    <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1Z" />
-  </>);
-
-/** Menu item: copy a session id to the clipboard. */
-export const CopyIcon = (props: IconProps = {}) =>
-  base(props.size ?? 14, props, <>
-    <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
-    <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
-  </>);
-
-/** Menu item: fork a session into a new one. */
-export const GitForkIcon = (props: IconProps = {}) =>
-  base(props.size ?? 14, props, <>
-    <circle cx="12" cy="18" r="3" />
-    <circle cx="6" cy="6" r="3" />
-    <circle cx="18" cy="6" r="3" />
-    <path d="M18 9v1a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V9" />
-    <path d="M12 12v3" />
-  </>);
-
-/** Menu item: search across every session's content. */
-export const SearchIcon = (props: IconProps = {}) =>
-  base(props.size ?? 14, props, <>
-    <circle cx="11" cy="11" r="7" />
-    <path d="m21 21-4.3-4.3" />
-  </>);
-
-/** Menu item: open the archived-session list. */
-export const ArchiveRestoreIcon = (props: IconProps = {}) =>
-  base(props.size ?? 14, props, <>
-    <path d="M3 12v9a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-9" />
-    <path d="M3 12 12 3l9 9" />
-    <path d="M12 3v13" />
-  </>);
-
-/** Menu item: leave the search or archive pane and go back to the list. */
-export const ArrowLeftIcon = (props: IconProps = {}) =>
-  base(props.size ?? 14, props, <>
-    <path d="m12 19-7-7 7-7" />
-    <path d="M19 12H5" />
-  </>);
-
-/** Menu item: archive a session. */
-export const ArchiveIcon = (props: IconProps = {}) =>
-  base(props.size ?? 14, props, <>
-    <rect width="20" height="5" x="2" y="3" rx="1" />
-    <path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" />
-    <path d="M10 12h4" />
   </>);

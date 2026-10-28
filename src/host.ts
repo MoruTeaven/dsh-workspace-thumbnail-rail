@@ -1,2 +1,2 @@
-/** Host plugin body — the rail is browser-side; nothing to contribute host-side. */
+/** Host half — nothing to contribute; the rail is browser-only. */
 export function apply() {}

@@ -1,191 +1,99 @@
 /**
- * Injected CSS — DSH theme variables with fallbacks, so the browser follows both
+ * Injected CSS — DSH theme variables with fallbacks, so the rail follows both
  * color schemes instead of hard-coding them.
  *
- * The whole surface sits inside the sidebar's `regionArea` seat, which the Host
- * already lays out as a flex column that fills the column (SidebarRoot.module.css
- * :227-236). This stylesheet turns that into the two-column explorer: a fixed
- * workspace column and a flexible session column.
+ * The rail is absolutely positioned INSIDE the shell's overlay layer (which is
+ * `position:absolute; inset:0`), so its geometry is written by frame.ts and
+ * only its paint lives here. That also means it must not claim pointer events
+ * where it is not drawn — the overlay layer is click-through except for its
+ * direct children, and the rail IS a direct child, so the whole column is
+ * clickable and the empty strip is only as tall as the column.
  */
 export const CSS = `
-.dsh-wsr-browser {
-  display: flex;
-  flex: 1;
-  min-height: 0;
-  min-width: 0;
-  font-family: var(--dsw-font-family, inherit);
-}
-
-/* Collapsed sidebar: a single icon column of workspace thumbnails. */
-.dsh-wsr-browser--rail {
-  flex-direction: column;
-  align-items: center;
-  gap: 7px;
-  padding: 7px 0;
-  overflow-y: auto;
-  scrollbar-width: none;
-}
-
-.dsh-wsr-browser--rail::-webkit-scrollbar {
-  display: none;
-}
-
-.dsh-wsr-browser__rail-scroll {
+.dsh-wsr-rail {
+  position: absolute;
+  /* top/height/left/width are written by frame.ts from the region rect. */
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 7px;
-}
-
-/* ── Workspace column ── */
-.dsh-wsr-column {
-  flex: none;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  border-right: 1px solid var(--dsw-alias-border-l1, rgba(0, 0, 0, 0.1));
-}
-
-/* "Add workspace": quiet icon control pinned above the tile list. */
-.dsh-wsr-column__add {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 28px;
-  margin: 6px 0 2px;
-  border: none;
-  border-radius: var(--dsw-radius-sm, 8px);
-  background: transparent;
-  color: var(--dsw-alias-label-secondary, #61666b);
-  cursor: pointer;
-}
-
-.dsh-wsr-column__add:hover {
-  background: var(--dsw-alias-interactive-bg-hover, rgba(128, 128, 128, 0.12));
-  color: var(--dsw-alias-label-primary, #1a1a1a);
-}
-
-.dsh-wsr-column__scroll {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
+  padding: 9px 0;
+  box-sizing: border-box;
   overflow-x: hidden;
+  overflow-y: auto;
   scrollbar-width: none;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 9px;
-  padding: 8px 6px;
+  font-family: var(--dsw-font-family, inherit);
+  background: var(--dsw-specific-sidebar-fill, var(--dsw-alias-bg-layer-1, transparent));
+  border-right: 1px solid var(--dsw-alias-border-l1, rgba(0, 0, 0, 0.1));
+  z-index: 1;
 }
 
-/* Empty registry: say what the "+" above is for. */
-.dsh-wsr-column__empty {
-  padding: 12px 4px;
-  font-size: 11px;
-  line-height: 1.5;
-  text-align: center;
-  color: var(--dsw-alias-label-tertiary, #8e8e8e);
-}
-
-.dsh-wsr-column__scroll::-webkit-scrollbar {
+.dsh-wsr-rail::-webkit-scrollbar {
   display: none;
 }
 
-/* Hidden column: a slim strip that still offers restore and add. */
-.dsh-wsr-strip {
-  flex: none;
-  width: 28px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  padding: 6px 0;
-  border-right: 1px solid var(--dsw-alias-border-l1, rgba(0, 0, 0, 0.1));
-}
-
-.dsh-wsr-strip .dsh-wsr-column__add {
-  width: 24px;
-  margin: 0;
-}
-
-.dsh-wsr-tile-wrap {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 3px;
-  max-width: 100%;
-}
-
-/* One workspace: a rounded thumbnail tile. */
-.dsh-wsr-tile {
+/* One workspace cell: a rounded thumbnail tile. */
+.dsh-wsr-cell {
   position: relative;
   flex: none;
-  width: 44px;
-  height: 44px;
+  width: 47px;
+  height: 47px;
   padding: 0;
   border: 1px solid transparent;
-  border-radius: var(--dsw-radius-md, 12px);
-  background: var(--dsw-alias-interactive-bg-default, rgba(128, 128, 128, 0.1));
-  color: var(--dsw-alias-label-tertiary, #81858c);
+  border-radius: var(--dsw-radius-md, 10px);
+  background: var(--dsw-alias-interactive-bg-default, rgba(128, 128, 128, 0.08));
+  color: var(--dsw-alias-label-tertiary, #8e8e8e);
   cursor: pointer;
   overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: border-color 0.15s, background 0.15s, color 0.15s;
+  flex-shrink: 0;
 }
 
-.dsh-wsr-tile:hover {
-  background: var(--dsw-alias-interactive-bg-hover, rgba(128, 128, 128, 0.18));
+.dsh-wsr-cell:hover {
+  background: var(--dsw-alias-interactive-bg-hover, rgba(128, 128, 128, 0.16));
   color: var(--dsw-alias-label-primary, #1a1a1a);
 }
 
-.dsh-wsr-tile--active {
+.dsh-wsr-cell--active {
   border-color: var(--dsw-alias-state-business-primary, #4f46e5);
   color: var(--dsw-alias-state-business-primary, #4f46e5);
-  background: color-mix(in srgb, var(--dsw-alias-state-business-primary, #4f46e5) 12%, transparent);
+  background: color-mix(in srgb, var(--dsw-alias-state-business-primary, #4f46e5) 10%, transparent);
 }
 
-/* An image is hovering this tile: show it as the drop target it is. */
-.dsh-wsr-tile--drop {
-  border-color: var(--dsw-alias-state-business-primary, #4f46e5);
-  border-style: dashed;
-  background: color-mix(in srgb, var(--dsw-alias-state-business-primary, #4f46e5) 18%, transparent);
-}
-
-.dsh-wsr-tile__img {
+.dsh-wsr-cell__img {
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
 }
 
-.dsh-wsr-tile__busy {
-  position: absolute;
-  right: 3px;
-  bottom: 3px;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--dsw-alias-state-success-primary, #22c55e);
-  box-shadow: 0 0 0 2px var(--dsw-alias-bg-base, #fff);
-}
-
-.dsh-wsr-tile__label {
+.dsh-wsr-cell__label {
   font-size: 10px;
   line-height: 1.3;
   color: var(--dsw-alias-label-tertiary, #8e8e8e);
-  max-width: 100%;
+  width: 100%;
+  text-align: center;
+  padding: 2px 3px 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.dsh-wsr-cell-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  flex: none;
+}
+
 .dsh-wsr-resize {
   flex: none;
-  height: 8px;
+  width: 100%;
+  height: 7px;
   cursor: col-resize;
   display: flex;
   align-items: center;
@@ -193,12 +101,11 @@ export const CSS = `
   background: transparent;
   border: none;
   padding: 0;
-  touch-action: none;
 }
 
 .dsh-wsr-resize::after {
   content: "";
-  width: 20px;
+  width: 22px;
   height: 2px;
   border-radius: 1px;
   background: var(--dsw-alias-border-l2, rgba(0, 0, 0, 0.16));
@@ -208,284 +115,16 @@ export const CSS = `
   background: var(--dsw-alias-state-business-primary, #4f46e5);
 }
 
-/* ── Session column ── */
-.dsh-wsr-sessions {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.dsh-wsr-sessions__head {
-  flex: none;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 4px;
-  height: 36px;
-  padding: 0 6px;
-  box-sizing: border-box;
-}
-
-.dsh-wsr-sessions__title {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--dsw-alias-label-tertiary, #81858c);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.dsh-wsr-sessions__new {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border: none;
-  border-radius: var(--dsw-radius-sm, 8px);
-  background: transparent;
-  color: var(--dsw-alias-label-secondary, #61666b);
-  cursor: pointer;
-}
-
-.dsh-wsr-sessions__new:hover {
-  background: var(--dsw-alias-interactive-bg-hover, rgba(128, 128, 128, 0.12));
-  color: var(--dsw-alias-label-primary, #1a1a1a);
-}
-
-/* The header's right-hand cluster: archive, search, new session. */
-.dsh-wsr-sessions__actions {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 1px;
-}
-
-/* Search field in the session header, matching the row's own text metrics so
-   the header does not change height when the pane switches. */
-.dsh-wsr-search {
-  flex: 1;
-  min-width: 0;
-  height: 28px;
-  box-sizing: border-box;
-  padding: 0 8px;
-  border: 0.5px solid var(--dsw-alias-border-l2, rgba(0, 0, 0, 0.14));
-  border-radius: var(--dsw-radius-sm, 8px);
-  background: var(--dsw-alias-interactive-bg-default, rgba(128, 128, 128, 0.08));
-  color: var(--dsw-alias-label-primary, #1a1a1a);
-  font-family: inherit;
-  font-size: 12px;
-  line-height: 20px;
-}
-
-.dsh-wsr-search:focus {
-  outline: none;
-  border-color: var(--dsw-alias-state-business-primary, #4f46e5);
-}
-
-.dsh-wsr-search::placeholder {
-  color: var(--dsw-alias-label-dimmed, #a0a0a0);
-}
-
-.dsh-wsr-sessions__scroll {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  padding: 0 6px 8px;
-}
-
-.dsh-wsr-sessions__empty {
-  padding: 12px 10px;
-  font-size: 12px;
-  color: var(--dsw-alias-label-dimmed, #a0a0a0);
-}
-
-/* Mirrors the Host browser's session row (hIlkoa_sessionRow): 32px tall,
-   hover and selection share the same wash — no separate "selected" token
-   exists in the Host palette. */
-.dsh-wsr-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  height: 32px;
-  box-sizing: border-box;
-  padding: 0 8px;
-  border: none;
-  border-radius: var(--dsw-radius-md, 12px);
-  background: transparent;
-  color: var(--dsw-alias-label-primary, #1a1a1a);
-  font-size: 13px;
-  line-height: 20px;
-  font-family: inherit;
-  text-align: left;
-  cursor: pointer;
-  user-select: none;
-}
-
-.dsh-wsr-row:hover,
-.dsh-wsr-row--active,
-.dsh-wsr-row--active:hover {
-  background: var(--dsw-alias-interactive-bg-hover, rgba(128, 128, 128, 0.12));
-}
-
-.dsh-wsr-row__dot {
-  flex: none;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--dsw-alias-state-success-primary, #22c55e);
-}
-
-.dsh-wsr-row__title {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* Pinned marker: quiet pin glyph ahead of the row's other leading icons. */
-.dsh-wsr-row__pin {
-  flex: none;
-  color: var(--dsw-alias-label-tertiary, #81858c);
-}
-
-/* Inline rename draft: the row becomes a field, with the refusal beneath it. */
-.dsh-wsr-row--rename {
-  flex-direction: column;
-  align-items: stretch;
-  gap: 3px;
-  height: auto;
-  min-height: 32px;
-  padding: 5px 4px;
-}
-
-.dsh-wsr-rename {
-  width: 100%;
-  height: 22px;
-  box-sizing: border-box;
-  padding: 0 6px;
-  border: 0.5px solid var(--dsw-alias-state-business-primary, #4f46e5);
-  border-radius: var(--dsw-radius-sm, 8px);
-  background: var(--dsw-alias-bg-base, #fff);
-  color: var(--dsw-alias-label-primary, #1a1a1a);
-  font-family: inherit;
-  font-size: 13px;
-  line-height: 20px;
-}
-
-.dsh-wsr-rename:focus {
-  outline: none;
-}
-
-.dsh-wsr-rename__error {
-  padding: 0 2px;
-  font-size: 11px;
-  line-height: 15px;
-  color: var(--dsw-alias-state-error-primary, #dc2626);
-}
-
-/* The tile label slot hosts the tile's rename field, so it shares its width. */
-.dsh-wsr-rename--tile {
-  height: 20px;
-  max-width: 100%;
-  box-sizing: border-box;
-  padding: 0 4px;
-  font-size: 10px;
-  line-height: 16px;
-  text-align: center;
-}
-
-/* Placeholder shown in place of a tile whose rename draft is open. */
-.dsh-wsr-tile--ghost {
-  cursor: default;
-  color: var(--dsw-alias-label-dimmed, #a0a0a0);
-}
-
-.dsh-wsr-tile__error {
-  font-size: 10px;
-  line-height: 13px;
-  color: var(--dsw-alias-state-error-primary, #dc2626);
-  text-align: center;
-}
-
-/* ── Drag reordering ── */
-.dsh-wsr-row--dragging {
-  opacity: 0.4;
-}
-
-/* Insertion markers: a rule above (before-anchor) or below (append) the row. */
-.dsh-wsr-row--drop-before {
-  box-shadow: inset 0 2px 0 0 var(--dsw-alias-state-business-primary, #4f46e5);
-}
-
-.dsh-wsr-row--drop-after {
-  box-shadow: inset 0 -2px 0 0 var(--dsw-alias-state-business-primary, #4f46e5);
-}
-
-/* Search hits and archive rows carry a second line, so they grow instead of
-   clipping: the interactive row sits above a muted detail line. */
-.dsh-wsr-row--stack {
-  height: auto;
-  min-height: 32px;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 2px;
-  padding: 5px 8px;
-}
-
-.dsh-wsr-row__snippet {
-  display: block;
-  font-size: 11px;
-  line-height: 15px;
-  color: var(--dsw-alias-label-tertiary, #81858c);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* Archive row's restore control: quiet text button, matching the row metrics. */
-.dsh-wsr-row__restore {
-  flex: none;
-  align-self: flex-start;
-  padding: 2px 7px;
-  border: 0.5px solid var(--dsw-alias-border-l2, rgba(0, 0, 0, 0.14));
-  border-radius: var(--dsw-radius-sm, 8px);
-  background: transparent;
-  color: var(--dsw-alias-label-secondary, #61666b);
-  font-family: inherit;
-  font-size: 11px;
-  line-height: 16px;
-  cursor: pointer;
-}
-
-.dsh-wsr-row__restore:hover {
-  background: var(--dsw-alias-interactive-bg-hover, rgba(128, 128, 128, 0.12));
-  color: var(--dsw-alias-label-primary, #1a1a1a);
-}
-
-/* ── Context menu — styled after the Host's own dropdown (menu surface +
-   menuItem in the shell stylesheet): hairline l2 stroke, elevation shadow,
-   translucent backdrop blur, 12px items with radius-md. ── */
+/* ── Context menu ── */
 .dsh-wsr-menu {
   position: fixed;
   z-index: 100000;
-  display: flex;
-  flex-direction: column;
   min-width: 158px;
   padding: 4px;
-  border: 0.5px solid var(--dsw-alias-border-l2, rgba(0, 0, 0, 0.14));
-  border-radius: var(--dsw-radius-lg, 16px);
-  background: color-mix(in srgb, var(--dsw-alias-bg-base, #fff) 88%, transparent);
-  box-shadow: var(--dsw-elevation-soft, 0 4px 16px rgba(0, 0, 0, 0.03), 0 0 24px rgba(0, 0, 0, 0.03));
-  backdrop-filter: var(--dsw-menu-backdrop-filter, blur(40px) saturate(150%));
-  -webkit-backdrop-filter: var(--dsw-menu-backdrop-filter, blur(40px) saturate(150%));
+  border-radius: var(--dsw-radius-lg, 12px);
+  background: var(--dsw-alias-bg-base, #fff);
+  border: 1px solid var(--dsw-alias-border-l1, rgba(0, 0, 0, 0.1));
+  box-shadow: var(--dsw-shadow-lv2, 0 8px 28px rgba(0, 0, 0, 0.18));
   font-family: var(--dsw-font-family, inherit);
 }
 
@@ -494,12 +133,12 @@ export const CSS = `
   align-items: center;
   gap: 7px;
   width: 100%;
-  padding: 4px 7px;
+  padding: 6px 8px;
   border: none;
-  border-radius: var(--dsw-radius-md, 12px);
+  border-radius: var(--dsw-radius-sm, 7px);
   background: transparent;
   color: var(--dsw-alias-label-primary, #1a1a1a);
-  font-size: calc(var(--dsh-content-font-size-secondary, 13px) - 1px);
+  font-size: 12px;
   font-family: inherit;
   text-align: left;
   cursor: pointer;
@@ -514,13 +153,17 @@ export const CSS = `
   color: var(--dsw-alias-state-error-primary, #dc2626);
 }
 
+.dsh-wsr-menu__item--danger:hover {
+  background: var(--dsw-alias-interactive-bg-danger-hover, rgba(220, 38, 38, 0.1));
+}
+
 .dsh-wsr-menu__sep {
   height: 1px;
   margin: 4px 2px;
   background: var(--dsw-alias-border-l1, rgba(0, 0, 0, 0.08));
 }
 
-/* Transient message shown when an image fails to become a thumbnail. */
+/* Toast shown when an image fails to become a thumbnail. */
 .dsh-wsr-toast {
   position: fixed;
   bottom: 24px;
@@ -536,210 +179,38 @@ export const CSS = `
   box-shadow: var(--dsw-shadow-lv2, 0 8px 28px rgba(0, 0, 0, 0.18));
 }
 
-/* ── Add-workspace directory browser ──
-   Same surface recipe as the context menu (hairline stroke, elevation shadow,
-   translucent blur) so it reads as part of the same family. */
-.dsh-wsr-picker {
-  position: fixed;
-  z-index: 100000;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  width: 320px;
-  max-width: calc(100vw - 32px);
-  max-height: min(72vh, 520px);
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-  padding: 12px;
-  box-sizing: border-box;
-  border: 0.5px solid var(--dsw-alias-border-l2, rgba(0, 0, 0, 0.14));
-  border-radius: var(--dsw-radius-lg, 16px);
-  background: color-mix(in srgb, var(--dsw-alias-bg-base, #fff) 94%, transparent);
-  box-shadow: var(--dsw-elevation-soft, 0 4px 16px rgba(0, 0, 0, 0.03), 0 0 24px rgba(0, 0, 0, 0.03));
-  backdrop-filter: var(--dsw-menu-backdrop-filter, blur(40px) saturate(150%));
-  -webkit-backdrop-filter: var(--dsw-menu-backdrop-filter, blur(40px) saturate(150%));
-  font-family: var(--dsw-font-family, inherit);
-}
-
-.dsh-wsr-picker__head {
-  flex: none;
-  display: flex;
+/* Header toggle injected beside the official search/filter/add actions. */
+.dsh-wsr-header-toggle {
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-}
-
-.dsh-wsr-picker__title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--dsw-alias-label-primary, #1a1a1a);
-}
-
-.dsh-wsr-picker__close {
+  justify-content: center;
   width: 24px;
   height: 24px;
+  padding: 0;
   border: none;
-  border-radius: var(--dsw-radius-sm, 8px);
+  border-radius: var(--dsw-radius-sm, 7px);
   background: transparent;
-  color: var(--dsw-alias-label-secondary, #61666b);
-  font-size: 16px;
-  line-height: 1;
+  color: var(--dsw-alias-label-secondary, #8e8e8e);
   cursor: pointer;
+  flex: none;
 }
 
-.dsh-wsr-picker__close:hover {
-  background: var(--dsw-alias-interactive-bg-hover, rgba(128, 128, 128, 0.12));
+.dsh-wsr-header-toggle:hover {
+  background: var(--dsw-alias-interactive-bg-hover, rgba(128, 128, 128, 0.16));
   color: var(--dsw-alias-label-primary, #1a1a1a);
 }
 
-/* Crumbs: a horizontally scrollable jump chain. */
-.dsh-wsr-picker__crumbs {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  min-width: 0;
-  overflow-x: auto;
-  scrollbar-width: none;
-  padding-bottom: 2px;
-  border-bottom: 1px solid var(--dsw-alias-border-l1, rgba(0, 0, 0, 0.08));
+.dsh-wsr-header-toggle svg {
+  display: block;
 }
 
-.dsh-wsr-picker__crumbs::-webkit-scrollbar {
-  display: none;
-}
-
-.dsh-wsr-picker__crumb {
-  flex: none;
-  padding: 2px 6px;
-  border: none;
-  border-radius: var(--dsw-radius-sm, 8px);
-  background: transparent;
-  color: var(--dsw-alias-label-tertiary, #81858c);
-  font-family: inherit;
-  font-size: 11px;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.dsh-wsr-picker__crumb:hover {
-  background: var(--dsw-alias-interactive-bg-hover, rgba(128, 128, 128, 0.12));
-  color: var(--dsw-alias-label-primary, #1a1a1a);
-}
-
-.dsh-wsr-picker__crumb--current {
-  color: var(--dsw-alias-label-primary, #1a1a1a);
-  font-weight: 600;
-}
-
-.dsh-wsr-picker__body {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.dsh-wsr-picker__row {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  width: 100%;
-  min-height: 28px;
-  box-sizing: border-box;
-  padding: 4px 7px;
-  border: none;
-  border-radius: var(--dsw-radius-sm, 8px);
-  background: transparent;
-  color: var(--dsw-alias-label-primary, #1a1a1a);
-  font-family: inherit;
-  font-size: 12px;
-  text-align: left;
-  cursor: pointer;
-}
-
-.dsh-wsr-picker__row:hover {
-  background: var(--dsw-alias-interactive-bg-hover, rgba(128, 128, 128, 0.12));
-}
-
-.dsh-wsr-picker__row-name {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.dsh-wsr-picker__empty,
-.dsh-wsr-picker__note {
-  padding: 8px 4px;
-  font-size: 11px;
-  line-height: 15px;
-  color: var(--dsw-alias-label-dimmed, #a0a0a0);
-}
-
-.dsh-wsr-picker__new {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.dsh-wsr-picker__error {
-  flex: none;
-  font-size: 11px;
-  line-height: 15px;
-  color: var(--dsw-alias-state-error-primary, #dc2626);
-}
-
-.dsh-wsr-picker__foot {
-  flex: none;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.dsh-wsr-picker__path {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 11px;
-  color: var(--dsw-alias-label-tertiary, #81858c);
-}
-
-.dsh-wsr-picker__action {
-  flex: none;
-  padding: 4px 11px;
-  border: 0.5px solid var(--dsw-alias-border-l2, rgba(0, 0, 0, 0.14));
-  border-radius: var(--dsw-radius-sm, 8px);
-  background: transparent;
-  color: var(--dsw-alias-label-primary, #1a1a1a);
-  font-family: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.dsh-wsr-picker__action:hover:not(:disabled) {
-  background: var(--dsw-alias-interactive-bg-hover, rgba(128, 128, 128, 0.12));
-}
-
-.dsh-wsr-picker__action:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
-.dsh-wsr-picker__action--primary {
-  border-color: transparent;
-  background: var(--dsw-alias-state-business-primary, #4f46e5);
-  color: #fff;
+/* Official workspace groups hidden while the rail focuses one workspace. */
+[data-wsr-hidden="1"] {
+  display: none !important;
 }
 `;
 
-/** Inject the browser stylesheet once; safe to call on every mount. */
+/** Inject the rail stylesheet once; safe to call on every mount. */
 export function injectStyles(): void {
   const tagId = "@moruteaven/dsh-workspace-thumbnail-rail/style";
   if (typeof document === "undefined") return;
