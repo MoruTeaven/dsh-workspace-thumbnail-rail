@@ -53,15 +53,29 @@ export const CSS = `
 }
 
 .dsh-wsr-cell:hover {
+  border-color: color-mix(in srgb, var(--dsw-alias-state-business-primary, #4f46e5) 38%, transparent);
   background: var(--dsw-alias-interactive-bg-hover, rgba(128, 128, 128, 0.16));
   color: var(--dsw-alias-label-primary, #1a1a1a);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--dsw-alias-state-business-primary, #4f46e5) 14%, transparent);
+}
+
+/* A tile's content (image or monogram fill) brightens slightly on hover so
+   the state stays visible even when the tile is fully covered. */
+.dsh-wsr-cell:hover :is(.dsh-wsr-cell__img, .dsh-wsr-cell__mono) {
+  filter: brightness(1.08);
 }
 
 .dsh-wsr-cell--active {
   border-color: var(--dsw-alias-state-business-primary, #4f46e5);
   color: var(--dsw-alias-state-business-primary, #4f46e5);
   background: color-mix(in srgb, var(--dsw-alias-state-business-primary, #4f46e5) 14%, transparent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--dsw-alias-state-business-primary, #4f46e5) 24%, transparent);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--dsw-alias-state-business-primary, #4f46e5) 34%, transparent),
+    0 0 14px color-mix(in srgb, var(--dsw-alias-state-business-primary, #4f46e5) 22%, transparent);
+}
+
+.dsh-wsr-cell--active :is(.dsh-wsr-cell__img, .dsh-wsr-cell__mono) {
+  filter: brightness(1.05) saturate(1.1);
 }
 
 /* The selected workspace's title joins the highlight. */
