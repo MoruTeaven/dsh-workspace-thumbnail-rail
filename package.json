@@ -1,6 +1,6 @@
 {
   "name": "@moruteaven/dsh-workspace-thumbnail-rail",
-  "version": "0.1.0-dev.10",
+  "version": "0.1.0-dev.11",
   "description": "Workspace thumbnail rail for the DeepSeek Harness (DSH) — give every workspace an icon image and switch between workspaces from a vertical rail beside the workspace list.",
   "type": "module",
   "main": "lib/index.js",

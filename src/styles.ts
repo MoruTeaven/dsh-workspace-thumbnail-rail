@@ -227,20 +227,25 @@ export const CSS = `
   background: var(--dsw-alias-interactive-bg-hover, rgba(128, 128, 128, 0.16));
 }
 
-/* Icons-only mode: the fold caret rides the tile's corner, since there is no
-   title row to host it. */
+/* Fold caret on the tile's top-right corner: the only placement that stays
+   visible in both the labelled and the icons-only layout. */
 .dsh-wsr-caret--overlay {
   position: absolute;
-  top: -4px;
-  right: -4px;
+  top: -6px;
+  right: -6px;
   z-index: 2;
-  width: 14px;
-  height: 14px;
+  width: 17px;
+  height: 17px;
   border-radius: 50%;
-  background: var(--dsw-alias-bg-base, #fff);
-  border: 1px solid var(--dsw-alias-border-l1, rgba(0, 0, 0, 0.1));
-  box-shadow: var(--dsw-shadow-lv1, 0 1px 4px rgba(0, 0, 0, 0.12));
-  color: var(--dsw-alias-label-secondary, #8e8e8e);
+  background: var(--dsw-alias-bg-elevated, var(--dsw-alias-bg-base, #2a2a2a));
+  border: 1px solid var(--dsw-alias-border-l2, rgba(128, 128, 128, 0.35));
+  box-shadow: var(--dsw-shadow-lv1, 0 1px 4px rgba(0, 0, 0, 0.28));
+  color: var(--dsw-alias-label-secondary, #c8c8c8);
+}
+
+.dsh-wsr-caret--overlay:hover {
+  color: var(--dsw-alias-label-primary, #fff);
+  border-color: var(--dsw-alias-state-business-primary, #4f46e5);
 }
 
 /*

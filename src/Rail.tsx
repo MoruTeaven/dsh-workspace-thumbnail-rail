@@ -708,10 +708,14 @@ export function Rail({
       isActive ? "dsh-wsr-cell-wrap--active" : "",
       onPath && !isActive ? "dsh-wsr-cell-wrap--path" : "",
     ].filter(Boolean).join(" ");
+    // The fold caret always rides the tile's top-right corner: in the label row
+    // it was a 9px glyph squeezed beside the title, which real users did not
+    // notice at all. On the corner it reads as "this tile has children" in both
+    // the labelled and the icons-only layout.
     const caret = children.length > 0 && (
       <button
         type="button"
-        className={`dsh-wsr-caret${prefs.iconsOnly ? " dsh-wsr-caret--overlay" : ""}`}
+        className="dsh-wsr-caret dsh-wsr-caret--overlay"
         aria-expanded={!folded}
         aria-label={caretLabel}
         title={caretLabel}
@@ -720,7 +724,7 @@ export function Rail({
           toggleCollapsed(workspace.workspaceId);
         }}
       >
-        <ChevronIcon size={9} open={!folded} />
+        <ChevronIcon size={12} open={!folded} />
       </button>
     );
 
@@ -764,11 +768,11 @@ export function Rail({
                 ? <TextTile text={thumb.text} color={thumb.color} />
                 : <img className="dsh-wsr-cell__img" src={thumb.src} alt="" draggable={false} />}
           </button>
+          {caret}
           {prefs.iconsOnly
-            ? caret
+            ? null
             : (
               <div className="dsh-wsr-cell__meta">
-                {caret}
                 <span className="dsh-wsr-cell__label">{workspace.title}</span>
               </div>
             )}
