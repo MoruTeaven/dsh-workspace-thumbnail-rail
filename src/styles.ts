@@ -90,6 +90,75 @@ export const CSS = `
   flex: none;
 }
 
+/* Label row: an optional fold caret sits beside the title. */
+.dsh-wsr-cell__meta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  width: 100%;
+  min-width: 0;
+}
+
+.dsh-wsr-caret {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 11px;
+  height: 11px;
+  padding: 0;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary, #8e8e8e);
+  cursor: pointer;
+}
+
+.dsh-wsr-caret:hover {
+  color: var(--dsw-alias-label-primary, #1a1a1a);
+  background: var(--dsw-alias-interactive-bg-hover, rgba(128, 128, 128, 0.16));
+}
+
+/*
+ * Tree branch: a parent and its children share one column. Depth is shown by a
+ * smaller child tile and a hairline guide, never by indentation — the rail is
+ * at most 160px wide, so an inset would eat the thumbnail itself.
+ */
+.dsh-wsr-branch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+  width: 100%;
+}
+
+.dsh-wsr-cell-wrap--child {
+  position: relative;
+}
+
+.dsh-wsr-cell-wrap--child::before {
+  content: "";
+  position: absolute;
+  left: -5px;
+  top: 3px;
+  bottom: 3px;
+  width: 1px;
+  border-radius: 1px;
+  background: var(--dsw-alias-border-l2, rgba(0, 0, 0, 0.16));
+}
+
+.dsh-wsr-cell-wrap--child .dsh-wsr-cell {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--dsw-radius-sm, 7px);
+}
+
+.dsh-wsr-cell-wrap--child .dsh-wsr-cell__label {
+  font-size: 9px;
+}
+
 .dsh-wsr-resize {
   flex: none;
   width: 100%;
@@ -206,6 +275,11 @@ export const CSS = `
 
 /* Official workspace groups hidden while the rail focuses one workspace. */
 [data-wsr-hidden="1"] {
+  display: none !important;
+}
+
+/* Official sessions outside the current workspace, in the "single list" mode. */
+[data-wsr-scope-hidden="1"] {
   display: none !important;
 }
 `;

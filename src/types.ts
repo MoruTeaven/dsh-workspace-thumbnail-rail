@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Types for the workspace thumbnail rail.
  *
  * Everything crossing the storage boundary is plain JSON: the browser half has
@@ -65,6 +65,13 @@ export interface RailPreferences {
   width: number;
   /** Whether the rail is shown at all. */
   enabled: boolean;
+  /**
+   * Workspace ids whose children are folded in the rail tree.
+   *
+   * Collapsed by exception, so a newly added Workspace starts expanded and the
+   * stored set never accumulates stale "expanded" entries.
+   */
+  collapsed: string[];
 }
 
 /** What a right-click menu action asks the rail to do. */

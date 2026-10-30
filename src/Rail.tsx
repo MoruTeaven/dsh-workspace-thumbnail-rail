@@ -1,8 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ColumnsIcon, FolderIcon, ImageIcon, ImageOffIcon, TrashIcon } from "./icons";
+import { ChevronIcon, ColumnsIcon, FolderIcon, ImageIcon, ImageOffIcon, TrashIcon } from "./icons";
 import { ThumbnailError, makeThumbnail } from "./image";
 import { installRail, type FramePatch } from "./frame";
 import { loadPrefs, loadThumbnails, savePrefs, saveThumbnails } from "./storage";
+import {
+  ancestorsOf,
+  buildWorkspaceTree,
+  hiddenFlatSessionIds,
+  sessionOwners,
+} from "./tree";
+import { readGroupBy, watchGroupBy, type WorkspaceGroupBy } from "./view-mode";
 import type { SessionListState, ThumbnailMap, WorkspaceListState, WorkspaceView } from "./types";
 
 /**
@@ -72,6 +79,7 @@ export function Rail({
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [focusId, setFocusId] = useState<string | null>(null);
+  const [groupBy, setGroupBy] = useState<WorkspaceGroupBy>(() => readGroupBy());
 
   const rootRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -111,6 +119,21 @@ export function Rail({
     () => workspaceOfSession(workspaces, currentSessionId),
     [workspaces, currentSessionId],
   );
+
+  /** Follow the official list's grouping mode (it decides the rail's shape). */
+  useEffect(() => watchGroupBy(setGroupBy), []);
+
+  /** Workspace hierarchy, shared by the rail tree and the focus ancestor walk. */
+  const tree = useMemo(() => buildWorkspaceTree(workspaces), [workspaces]);
+
+  /** Id lookup for the recursive renderer, so depth never rescans the list. */
+  const workspaceById = useMemo(
+    () => new Map(workspaces.map((workspace) => [workspace.workspaceId, workspace])),
+    [workspaces],
+  );
+
+  /** Session → owning Workspace, for scoping the official flat list. */
+  const owners = useMemo(() => sessionOwners(workspaces), [workspaces]);
 
   /** Show a transient message, replacing any in flight. */
   const notify = useCallback((message: string) => {
@@ -159,6 +182,12 @@ export function Rail({
    * React re-renders `className`/`style` and would drop those, while an
    * unmanaged attribute survives until the node is replaced (the observer in
    * the effect below re-applies it when that happens).
+   *
+   * In "Workspace Tree" the sections NEST: a parent's section wraps its
+   * children, so hiding every non-target section also hid the focused child's
+   * ancestors — and with them the child itself, which is why focusing a child
+   * Workspace left the list empty. The target and every section that contains
+   * it therefore stay visible; everything else still goes.
    */
   const applyFocus = useCallback((workspaceId: string | null) => {
     const sections = Array.from(document.querySelectorAll<HTMLElement>('[class*="groupSection"]'));
@@ -166,13 +195,15 @@ export function Rail({
       for (const section of sections) section.removeAttribute("data-wsr-hidden");
       return;
     }
+    const targetKey = `workspace:${workspaceId}`;
     const target = sections.find((section) => {
       const header = section.querySelector<HTMLElement>('[data-row-key^="workspace:"]');
-      return header?.getAttribute("data-row-key") === `workspace:${workspaceId}`;
+      return header?.getAttribute("data-row-key") === targetKey;
     });
     if (target === undefined) return;
     for (const section of sections) {
-      if (section === target) section.removeAttribute("data-wsr-hidden");
+      const keep = section === target || section.contains(target);
+      if (keep) section.removeAttribute("data-wsr-hidden");
       else section.setAttribute("data-wsr-hidden", "1");
     }
   }, []);
@@ -193,27 +224,93 @@ export function Rail({
     return () => observer.disconnect();
   }, [focusId, applyFocus]);
 
-  /** Expand the target group and hide every other one. */
+  /**
+   * Expand the target group (and, in the tree, every ancestor above it) before
+   * hiding the rest.
+   *
+   * A nested Workspace row only exists once its parents are open, so the walk
+   * repeats: opening a parent mounts the next level, which the following pass
+   * then opens. It stops as soon as a pass changes nothing.
+   */
   const focusWorkspace = useCallback(async (workspaceId: string) => {
-    const targetKey = `workspace:${workspaceId}`;
     const nextTick = () => new Promise<void>((resolve) => { setTimeout(resolve, 30); });
+    const chain = [...ancestorsOf(workspaceId, tree.parentOf), workspaceId];
 
-    for (let step = 0; step < 5; step += 1) {
-      const target = document.querySelector<HTMLElement>(`[data-row-key="${targetKey}"]`);
-      if (target === null) break;
-      if (target.getAttribute("aria-expanded") === "true") break;
-      target.click();
-      await nextTick();
+    for (let pass = 0; pass < 6; pass += 1) {
+      let opened = false;
+      for (const id of chain) {
+        const row = document.querySelector<HTMLElement>(`[data-row-key="workspace:${id}"]`);
+        if (row === null || row.getAttribute("aria-expanded") === "true") continue;
+        row.click();
+        opened = true;
+        await nextTick();
+      }
+      if (!opened) break;
     }
 
     setFocusId(workspaceId);
-    document.querySelector<HTMLElement>(`[data-row-key="${targetKey}"]`)
+    document.querySelector<HTMLElement>(`[data-row-key="workspace:${workspaceId}"]`)
       ?.scrollIntoView({ block: "nearest" });
-  }, []);
+  }, [tree]);
+
+  /**
+   * Narrow the official "In one list" view to the current Workspace.
+   *
+   * That grouping mode is account-wide by design, so the rail hides every row
+   * whose Session belongs to another Workspace. Rows are marked with a data
+   * attribute (React owns their class/style) and re-marked on each mutation,
+   * because the list virtualizes and rebuilds rows as the user scrolls.
+   * Nothing is hidden while no Workspace owns the current session: an unscoped
+   * list is a better fallback than an empty one.
+   */
+  useEffect(() => {
+    const scoped = groupBy === "flat" && activeId !== undefined;
+    const apply = () => {
+      const rows = document.querySelectorAll<HTMLElement>('[data-row-key^="session:"]');
+      if (!scoped) {
+        for (const row of rows) row.removeAttribute("data-wsr-scope-hidden");
+        return;
+      }
+      const ids = Array.from(rows, (row) => (row.dataset.rowKey ?? "").slice("session:".length));
+      const hidden = hiddenFlatSessionIds(owners, activeId, ids);
+      for (const row of rows) {
+        const id = (row.dataset.rowKey ?? "").slice("session:".length);
+        if (hidden.has(id)) row.setAttribute("data-wsr-scope-hidden", "1");
+        else row.removeAttribute("data-wsr-scope-hidden");
+      }
+    };
+    apply();
+    let scheduled = false;
+    const observer = new MutationObserver(() => {
+      if (scheduled) return;
+      scheduled = true;
+      window.requestAnimationFrame(() => {
+        scheduled = false;
+        apply();
+      });
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [groupBy, activeId, owners]);
 
   /** Show every workspace group again. */
   const showAllWorkspaces = useCallback(() => {
     setFocusId(null);
+  }, []);
+
+  /** Fold or unfold one parent's children in the rail tree. */
+  const toggleCollapsed = useCallback((workspaceId: string) => {
+    setPrefs((current) => {
+      const folded = current.collapsed.includes(workspaceId);
+      const next = {
+        ...current,
+        collapsed: folded
+          ? current.collapsed.filter((id) => id !== workspaceId)
+          : [...current.collapsed, workspaceId],
+      };
+      savePrefs(next);
+      return next;
+    });
   }, []);
 
   /** Open the OS file picker for one workspace. */
@@ -367,6 +464,92 @@ export function Rail({
     }
   }, [clearFor, notify]);
 
+  /**
+   * Render one rail cell, plus its children while the tree mode is on.
+   *
+   * The rail is at most 160px wide, so depth is NOT expressed with indentation:
+   * a hairline guide and a slightly smaller tile say "child" without eating the
+   * thumbnail. A parent gains a caret that folds its subtree, and the fold state
+   * is persisted, so the shape survives a reload.
+   *
+   * @param workspaceId - the Workspace to draw.
+   * @param isChild - whether this node sits below another one.
+   * @returns the cell (with its subtree), or null if the Workspace disappeared.
+   */
+  const renderNode = (workspaceId: string, isChild: boolean): React.ReactNode => {
+    const workspace = workspaceById.get(workspaceId);
+    if (workspace === undefined) return null;
+    const children = tree.children.get(workspace.workspaceId) ?? [];
+    const folded = prefs.collapsed.includes(workspace.workspaceId);
+    const thumb = thumbnails[workspace.workspaceId];
+    const isActive = workspace.workspaceId === activeId;
+    const caretLabel = folded
+      ? `展开 ${workspace.title} 的子工作区`
+      : `收起 ${workspace.title} 的子工作区`;
+
+    return (
+      <div
+        className={`dsh-wsr-branch${isChild ? " dsh-wsr-branch--child" : ""}`}
+        key={workspace.workspaceId}
+      >
+        <div className={`dsh-wsr-cell-wrap${isChild ? " dsh-wsr-cell-wrap--child" : ""}`}>
+          <button
+            type="button"
+            className={`dsh-wsr-cell${isActive ? " dsh-wsr-cell--active" : ""}`}
+            title={workspace.title}
+            aria-label={workspace.title}
+            aria-current={isActive || undefined}
+            onClick={() => {
+              // "In one list" has no groups to focus, and the list is scoped to
+              // the current Workspace — so a click must MOVE the current
+              // Workspace instead, which is what opening its newest
+              // conversation does. Without this the click would look dead.
+              if (groupBy === "flat") {
+                openWorkspaceConversation(workspace.workspaceId);
+                return;
+              }
+              if (focusId === workspace.workspaceId) {
+                setFocusId(null);
+                return;
+              }
+              void focusWorkspace(workspace.workspaceId);
+            }}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              const rect = e.currentTarget.getBoundingClientRect();
+              setMenu({ workspaceId: workspace.workspaceId, x: rect.right + 4, y: rect.top });
+            }}
+          >
+            {thumb === undefined
+              ? <FolderIcon size={18} />
+              : <img className="dsh-wsr-cell__img" src={thumb.src} alt="" draggable={false} />}
+          </button>
+          <div className="dsh-wsr-cell__meta">
+            {children.length > 0 && (
+              <button
+                type="button"
+                className="dsh-wsr-caret"
+                aria-expanded={!folded}
+                aria-label={caretLabel}
+                title={caretLabel}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  toggleCollapsed(workspace.workspaceId);
+                }}
+              >
+                <ChevronIcon size={9} open={!folded} />
+              </button>
+            )}
+            <span className="dsh-wsr-cell__label">{workspace.title}</span>
+          </div>
+        </div>
+        {children.length > 0 && !folded
+          ? children.map((child) => renderNode(child.workspaceId, true))
+          : null}
+      </div>
+    );
+  };
+
   return (
     <div ref={rootRef} className="dsh-wsr-rail" data-plugin="dsh-workspace-thumbnail-rail">
       <input
@@ -377,38 +560,9 @@ export function Rail({
         onChange={onFileChosen}
       />
 
-      {workspaces.map((workspace) => {
-        const thumb = thumbnails[workspace.workspaceId];
-        const isActive = workspace.workspaceId === activeId;
-        return (
-          <div className="dsh-wsr-cell-wrap" key={workspace.workspaceId}>
-            <button
-              type="button"
-              className={`dsh-wsr-cell${isActive ? " dsh-wsr-cell--active" : ""}`}
-              title={workspace.title}
-              aria-label={workspace.title}
-              aria-current={isActive || undefined}
-              onClick={() => {
-                if (focusId === workspace.workspaceId) {
-                  setFocusId(null);
-                  return;
-                }
-                void focusWorkspace(workspace.workspaceId);
-              }}
-              onContextMenu={(e) => {
-                e.preventDefault();
-                const rect = e.currentTarget.getBoundingClientRect();
-                setMenu({ workspaceId: workspace.workspaceId, x: rect.right + 4, y: rect.top });
-              }}
-            >
-              {thumb === undefined
-                ? <FolderIcon size={18} />
-                : <img className="dsh-wsr-cell__img" src={thumb.src} alt="" draggable={false} />}
-            </button>
-            <span className="dsh-wsr-cell__label">{workspace.title}</span>
-          </div>
-        );
-      })}
+      {groupBy === "workspace-tree"
+        ? tree.roots.map((root) => renderNode(root.workspaceId, false))
+        : workspaces.map((workspace) => renderNode(workspace.workspaceId, false))}
 
       {prefs.enabled && workspaces.length > 0 && (
         <div

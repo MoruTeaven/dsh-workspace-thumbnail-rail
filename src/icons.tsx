@@ -1,4 +1,4 @@
-﻿/** Minimal inline SVG icons — paths from Lucide (ISC license, https://lucide.dev). */
+/** Minimal inline SVG icons — paths from Lucide (ISC license, https://lucide.dev). */
 import type { ReactNode } from "react";
 
 interface IconProps {
@@ -67,4 +67,15 @@ export const ColumnsIcon = (props: IconProps = {}) =>
   base(props.size ?? 14, props, <>
     <rect width="18" height="18" x="3" y="3" rx="2" />
     <path d="M9 3v18" />
+  </>);
+
+/**
+ * Fold/unfold caret for a parent tile in the rail tree.
+ *
+ * The same chevron rotates instead of swapping glyphs, so folding never makes
+ * the row jump: the SVG stays the same box in both states.
+ */
+export const ChevronIcon = ({ open = false, ...props }: IconProps & { open?: boolean } = {}) =>
+  base(props.size ?? 9, { ...props, style: { transform: open ? "rotate(90deg)" : "none", transition: "transform 0.15s" } }, <>
+    <path d="m9 18 6-6-6-6" />
   </>);

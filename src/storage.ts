@@ -1,4 +1,4 @@
-﻿import type { RailPreferences, ThumbnailMap, ThumbnailRecord } from "./types";
+import type { RailPreferences, ThumbnailMap, ThumbnailRecord } from "./types";
 
 /**
  * Browser-side persistence.
@@ -72,8 +72,8 @@ export function saveThumbnails(map: ThumbnailMap): boolean {
   return writeJson(THUMBNAIL_KEY, map);
 }
 
-/** Default preferences: a 72px rail, shown. */
-export const DEFAULT_PREFS: RailPreferences = { width: 72, enabled: true };
+/** Default preferences: a 72px rail, shown, every parent expanded. */
+export const DEFAULT_PREFS: RailPreferences = { width: 72, enabled: true, collapsed: [] };
 
 /** Clamp the persisted width into a range the frame can always accommodate. */
 const MIN_WIDTH = 48;
@@ -85,7 +85,14 @@ export function loadPrefs(): RailPreferences {
   const width = typeof raw.width === "number" && Number.isFinite(raw.width)
     ? Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, Math.round(raw.width)))
     : DEFAULT_PREFS.width;
-  return { width, enabled: typeof raw.enabled === "boolean" ? raw.enabled : DEFAULT_PREFS.enabled };
+  const collapsed = Array.isArray(raw.collapsed)
+    ? raw.collapsed.filter((id): id is string => typeof id === "string" && id !== "")
+    : [];
+  return {
+    width,
+    enabled: typeof raw.enabled === "boolean" ? raw.enabled : DEFAULT_PREFS.enabled,
+    collapsed: [...new Set(collapsed)],
+  };
 }
 
 /** Persist rail preferences. @returns whether it landed. */
