@@ -69,15 +69,14 @@ export const CSS = `
   border-color: var(--dsw-alias-state-business-primary, #4f46e5);
   color: var(--dsw-alias-state-business-primary, #4f46e5);
   background: color-mix(in srgb, var(--dsw-alias-state-business-primary, #4f46e5) 14%, transparent);
-  /* A fat SOLID accent ring (no glow — halos read as noise on a 47px tile),
-     then a base-colored spacer that separates this ring from the run-state
-     outline drawn outside the tile. */
+  /* A fat SOLID accent ring, then the dark outer stroke the user asked for —
+     near-black reads hard against both themes and against any state ring. */
   box-shadow:
     0 0 0 2.5px var(--dsw-alias-state-business-primary, #4f46e5),
-    0 0 0 6px color-mix(in srgb, var(--dsw-alias-bg-base, #fff) 80%, transparent);
+    0 0 0 5.5px var(--dsw-static-neutral-900, #17171c);
   /* Scale is the one signal hover never gets: at thumbnail sizes a size
      change is the clearest "this tile is different" cue there is. */
-  transform: scale(1.08);
+  transform: scale(1.15);
 }
 
 /* A full-tile accent wash over the image/monogram keeps the selection
