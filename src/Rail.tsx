@@ -21,7 +21,14 @@ import {
   sessionOwners,
 } from "./tree";
 import { readGroupBy, watchGroupBy, type WorkspaceGroupBy } from "./view-mode";
-import type { SessionListState, ThumbnailMap, WorkspaceListState, WorkspaceView } from "./types";
+import { runStateLabel, workspaceRunState } from "./status";
+import type {
+  SessionListState,
+  SessionUiStatus,
+  ThumbnailMap,
+  WorkspaceListState,
+  WorkspaceView,
+} from "./types";
 
 /**
  * The thumbnail rail: one vertical cell per workspace, drawn in the column the
@@ -48,6 +55,12 @@ export interface RailActions {
 export interface RailProps extends RailActions {
   useWorkspaces: <T,>(selector: (state: WorkspaceListState) => T) => T;
   useSessions: <T,>(selector: (state: SessionListState) => T) => T;
+  /**
+   * The slot-standard live session-status store: Session id → its UI status.
+   * Present on every slot the current runner mounts; the run-state ring reads
+   * it (with the session list's own `running` as the fallback).
+   */
+  useSessionStatus: <T,>(selector: (state: ReadonlyMap<string, SessionUiStatus>) => T) => T;
 }
 
 /** Build stamp injected by esbuild (`define`); see storage.markRuntime. */
@@ -79,6 +92,7 @@ function workspaceOfSession(
 export function Rail({
   useWorkspaces,
   useSessions,
+  useSessionStatus,
   openSession,
   startWorkspace,
   removeWorkspace,
@@ -88,6 +102,7 @@ export function Rail({
   const recentWorkspaceId = useWorkspaces((state) => state.recentWorkspaceId);
   const currentSessionId = useSessions((state) => state.current);
   const sessionsById = useSessions((state) => state.byId);
+  const statusById = useSessionStatus((state) => state);
 
   const [thumbnails, setThumbnails] = useState<ThumbnailMap>(() => loadThumbnails());
   const [prefs, setPrefs] = useState(() => loadPrefs());
@@ -599,6 +614,12 @@ export function Rail({
     // matching where the official list files that conversation.
     const isActive = workspace.workspaceId === scopeId;
     const onPath = activePath?.has(workspace.workspaceId) ?? false;
+    // One ring color per workspace: its sessions' live status folded by the
+    // official precedence (pending interaction > running > unread completion).
+    const runState = workspaceRunState(workspace.sessionIds, statusById, sessionsById);
+    const cellTitle = runState === undefined
+      ? workspace.title
+      : `${workspace.title} · ${runStateLabel(runState)}`;
     // This node's children container lights up only when the node is a REAL
     // ancestor of the selection — the selection's own subtree is not part of
     // the route from the root to the selection.
@@ -639,9 +660,13 @@ export function Rail({
         <div className={wrapClass}>
           <button
             type="button"
-            className={`dsh-wsr-cell${isActive ? " dsh-wsr-cell--active" : ""}`}
-            title={workspace.title}
-            aria-label={workspace.title}
+            className={[
+              "dsh-wsr-cell",
+              isActive ? "dsh-wsr-cell--active" : "",
+              runState !== undefined ? `dsh-wsr-cell--status-${runState}` : "",
+            ].filter(Boolean).join(" ")}
+            title={cellTitle}
+            aria-label={cellTitle}
             aria-current={isActive || undefined}
             onClick={() => {
               // "In one list" has no groups to focus, and the list is scoped to

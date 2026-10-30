@@ -78,6 +78,27 @@ export const CSS = `
   filter: brightness(1.05) saturate(1.1);
 }
 
+/*
+ * Run-state ring: one workspace's sessions fold into a single state (status.ts)
+ * drawn as an outline OUTSIDE the tile — outline never fights the hover/active
+ * box-shadow rings, follows the tile's radius, and colors follow the theme's
+ * state aliases: blue = running, yellow = waiting for you, green = completed.
+ */
+.dsh-wsr-cell--status-running {
+  outline: 2px solid var(--dsw-alias-state-info-primary, #3b82f6);
+  outline-offset: 1px;
+}
+
+.dsh-wsr-cell--status-attention {
+  outline: 2px solid var(--dsw-alias-state-warn-primary, #d97706);
+  outline-offset: 1px;
+}
+
+.dsh-wsr-cell--status-done {
+  outline: 2px solid var(--dsw-alias-state-success-primary, #16a34a);
+  outline-offset: 1px;
+}
+
 /* The selected workspace's title joins the highlight. */
 .dsh-wsr-cell-wrap--active .dsh-wsr-cell__label {
   color: var(--dsw-alias-state-business-primary, #4f46e5);

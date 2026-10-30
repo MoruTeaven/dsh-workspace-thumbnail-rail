@@ -30,7 +30,24 @@ export interface WorkspaceListState {
 /** The session-list projection the rail reads to find the current session. */
 export interface SessionListState {
   current: string | undefined;
-  byId: Record<string, { id: string; updatedAt: number; blank?: boolean } | undefined>;
+  byId: Record<string, { id: string; updatedAt: number; blank?: boolean; running?: boolean } | undefined>;
+}
+
+/**
+ * One session's live UI status, as the slot-standard `useSessionStatus` hook
+ * projects it. Field names mirror the official browser's consumption
+ * (dsh-client-ui-workspace's sessionNode); every field is optional so a
+ * partially-populated entry still aggregates.
+ */
+export interface SessionUiStatus {
+  /** Live turn activity. */
+  running?: boolean;
+  /** Number of live subagent children. */
+  runningSubagentCount?: number;
+  /** An interaction awaiting the user (approval / plan-review / question). */
+  pendingInteraction?: { kind?: string } | null;
+  /** A finished turn the user has not seen yet. */
+  completionUnread?: boolean;
 }
 
 /**
