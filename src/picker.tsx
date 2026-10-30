@@ -137,7 +137,7 @@ export function ThumbnailPicker(props: ThumbnailPickerProps) {
               >
                 <input
                   type="color"
-                  value={isCustomColor(color) ? color : "#4f46e5"}
+                  value={isCustomColor(color) ? color : (PALETTE[0] as string)}
                   onChange={(event) => setColor(event.target.value)}
                 />
               </label>

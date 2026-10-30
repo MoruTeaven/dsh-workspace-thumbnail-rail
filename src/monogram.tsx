@@ -11,34 +11,37 @@
  * hashing the workspace id, so a workspace keeps its color across re-renders,
  * reloads and sibling additions (a Math.random() draw would flicker the whole
  * rail on every state change and reshuffle whenever one row is removed).
- * The palette entries are all ~600-level fills, so the white glyph keeps
- * roughly the same contrast in both color schemes.
+ * The palette is deliberately low-saturation, so a rail full of tiles reads
+ * calm while the white glyph keeps the same strong contrast in both schemes.
  */
 
 /**
- * Fill colors that stay readable behind a white glyph in both themes.
+ * Fill colors behind a white glyph: hue variety kept, saturation cut to about
+ * 40% (a typical 600-level fill sits near 70%), so the tiles look muted
+ * instead of loud. Every entry keeps ≥ 4:1 contrast with the white glyph in
+ * both themes.
  *
  * Exported so the thumbnail picker offers the exact same palette the default
  * tiles draw from — a user-picked color then never clashes with the rail's
  * look, and the default suggestion is always one of these.
  */
 export const PALETTE = [
-  "#4f46e5", // indigo
-  "#2563eb", // blue
-  "#0284c7", // sky
-  "#0891b2", // cyan
-  "#0d9488", // teal
-  "#059669", // emerald
-  "#65a30d", // lime
-  "#d97706", // amber
-  "#ea580c", // orange
-  "#dc2626", // red
-  "#e11d48", // rose
-  "#db2777", // pink
-  "#c026d3", // fuchsia
-  "#9333ea", // purple
-  "#7c3aed", // violet
-  "#475569", // slate
+  "#554fba", // indigo
+  "#4c70bd", // blue
+  "#367393", // sky
+  "#327788", // cyan
+  "#2b766f", // teal
+  "#2a715b", // emerald
+  "#5f8030", // lime
+  "#a3733c", // amber
+  "#b46942", // orange
+  "#b64c4c", // red
+  "#b8465f", // rose
+  "#b54d7b", // pink
+  "#a44aaf", // fuchsia
+  "#874cbd", // purple
+  "#764cbd", // violet
+  "#3e5372", // slate
 ] as const;
 
 /**
