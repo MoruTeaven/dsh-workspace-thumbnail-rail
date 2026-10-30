@@ -806,8 +806,14 @@ export function Rail({
           grouping mode the official list is in. Rendering the FLAT list from
           `workspaces` here would also re-render every child twice (once under
           its parent, once as a top-level row), so the tree projection is the
-          only source of cells. */}
-      {tree.roots.map((root) => renderNode(root.workspaceId, 0))}
+          only source of cells.
+
+          The tree column is its own box: it owns the centred gutter and the
+          left-aligned indent ladder, while the rail keeps its padding for the
+          resize handle. */}
+      <div className="dsh-wsr-tree">
+        {tree.roots.map((root) => renderNode(root.workspaceId, 0))}
+      </div>
 
       {prefs.enabled && workspaces.length > 0 && (
         <div

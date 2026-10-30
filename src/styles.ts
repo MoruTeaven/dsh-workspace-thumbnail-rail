@@ -164,22 +164,24 @@ export const CSS = `
   padding: 0 2px;
 }
 
+/* Child tile glyphs scale with the tile itself, so a third-level tile never
+   carries text sized for the root. */
 .dsh-wsr-cell-wrap--child .dsh-wsr-cell__mono {
-  font-size: 14px;
+  font-size: calc(var(--wsr-tile, 41px) * 0.34);
 }
 
 .dsh-wsr-cell-wrap--child .dsh-wsr-cell__mono--wide {
-  font-size: 21px;
+  font-size: calc(var(--wsr-tile, 41px) * 0.52);
 }
 
 .dsh-wsr-cell-wrap--child .dsh-wsr-cell__mono--long {
-  font-size: 9px;
+  font-size: calc(var(--wsr-tile, 41px) * 0.22);
 }
 
 .dsh-wsr-cell__label {
   font-size: 10px;
   line-height: 1.3;
-  color: var(--dsw-alias-label-tertiary, #8e8e8e);
+  color: var(--dsw-alias-label-secondary, #6b6b6b);
   width: 100%;
   text-align: center;
   padding: 2px 3px 0;
@@ -195,6 +197,9 @@ export const CSS = `
   align-items: center;
   gap: 3px;
   flex: none;
+  /* Pin the row to its tile's width so a long title ellipsizes inside the
+     tile instead of widening the row and pushing the tree out of the rail. */
+  width: var(--wsr-tile, 47px);
 }
 
 /* Label row: an optional fold caret sits beside the title. */
@@ -249,87 +254,136 @@ export const CSS = `
 }
 
 /*
- * Tree branch: a parent and its children share one column. The hierarchy is
- * drawn with real connector lines — a vertical rail per children container
- * and a horizontal stub per child tile — plus a nesting pill whose background
- * stacks one translucent layer per level, so deeper levels still read as
- * progressively darker shading without any per-depth class. Connector
- * geometry follows the --wsr-depth custom property (set by Rail.tsx), so
- * nested levels shift left instead of overlapping; max()/calc() clamp the
- * lines onto the tiles at the narrowest rail widths.
+ * Tree layout: one left-aligned column inside a centred gutter.
+ *
+ * A tree is only legible when every child sits to the RIGHT of its parent and
+ * each level steps in. The rail cannot rely on per-depth classes, so the
+ * indent rides the nested children containers instead: nesting accumulates it
+ * naturally and the geometry stays a pure function of the level. The gutter
+ * keeps a ROOT tile centred in the rail, and the indent is clamped by the
+ * percentage so a wide rail steps further while the minimum 48px rail still
+ * fits one level.
  */
+.dsh-wsr-tree {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 7px;
+  width: 100%;
+  box-sizing: border-box;
+  /* Centre the root tile: (rail width - 47px) / 2. */
+  padding-left: max(0px, calc((100% - 47px) / 2));
+}
+
 .dsh-wsr-branch {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-start;
   gap: 5px;
   flex: none;
   width: 100%;
+  /* This level's tile edge. Connectors read the same variable, so a line can
+     never miss its tile's midline however deep the level is. */
+  --wsr-tile: calc(47px - var(--wsr-depth, 0) * 6px);
 }
 
+/*
+ * A child row: a shaded track from the tile edge to the right of the column,
+ * with a hairline inset edge. The tint is mixed from the theme's tertiary
+ * label in low alpha, so one layer stays subtle in both schemes while nested
+ * levels compound into progressively darker (or lighter) shading — no
+ * per-depth class needed.
+ */
 .dsh-wsr-branch--child {
   position: relative;
   padding: 3px 0;
   border-radius: var(--dsw-radius-md, 10px);
-  background: var(--dsw-alias-interactive-bg-default, rgba(128, 128, 128, 0.08));
+  background: color-mix(in srgb, var(--dsw-alias-label-tertiary, #8e8e8e) 10%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--dsw-alias-label-tertiary, #8e8e8e) 13%, transparent);
 }
 
-/* Horizontal stub: from the vertical rail to this tile's left edge, at the
-   tile's midline (3px pill padding + half of the 40px tile). */
-.dsh-wsr-branch--child::after {
-  content: "";
-  position: absolute;
-  top: 23px;
-  right: calc(50% + 20px);
-  height: 1px;
-  width: calc(50% - 20px - max(2px, 50% - 29px - (var(--wsr-depth, 1) - 1) * 12px));
-  border-radius: 1px;
-  background: var(--dsw-alias-border-l2, rgba(0, 0, 0, 0.16));
-}
-
-/* Children container: the vertical rail drops from the parent tile down
-   through every sibling level. */
+/* Children container: one indent step per level, and the vertical rail that
+   drops from the parent tile through every sibling below it. */
 .dsh-wsr-branch__children {
   position: relative;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-start;
   gap: 5px;
   width: 100%;
+  box-sizing: border-box;
+  padding-left: clamp(8px, 13%, 18px);
 }
 
 .dsh-wsr-branch__children::before {
   content: "";
   position: absolute;
-  top: 0;
+  /* Reaches up into the gap so the rail starts at the parent tile, not at the
+     container's own top edge. */
+  top: -5px;
   bottom: 0;
-  left: max(2px, calc(50% - 29px - (var(--wsr-depth, 1) - 1) * 12px));
-  width: 1px;
+  left: 4px;
+  width: 1.5px;
   border-radius: 1px;
-  background: var(--dsw-alias-border-l2, rgba(0, 0, 0, 0.16));
+  background: color-mix(in srgb, var(--dsw-alias-label-tertiary, #8e8e8e) 55%, transparent);
 }
 
-/* The route from the root down to the selection: its connectors light up in
-   the accent color so the path reads at a glance. The stub thickens, the
-   rail widens — widths stay computed so the joints still meet. */
+/* Elbow: a stub from the vertical rail to the child tile's left edge, ending
+   in a dot at the joint. Both are positioned off the branch's own left edge,
+   which is exactly one indent step inside the rail (the negative offsets). */
+.dsh-wsr-branch--child::before {
+  content: "";
+  position: absolute;
+  top: calc(3px + var(--wsr-tile) / 2 - 0.75px);
+  left: -9px;
+  width: 9.5px;
+  height: 1.5px;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--dsw-alias-label-tertiary, #8e8e8e) 55%, transparent);
+}
+
+.dsh-wsr-branch--child::after {
+  content: "";
+  position: absolute;
+  top: calc(3px + var(--wsr-tile) / 2 - 2.5px);
+  left: -11.5px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--dsw-alias-label-tertiary, #8e8e8e) 75%, transparent);
+}
+
+/* The route from the root down to the selection lights up in the accent
+   color, so the path reads at a glance. Widths stay computed so the joints
+   still meet. */
 .dsh-wsr-branch__children--path::before {
-  width: 2px;
+  left: 3.25px;
+  width: 2.5px;
+  background: var(--dsw-alias-state-business-primary, #4f46e5);
+}
+
+.dsh-wsr-branch--path::before {
+  left: -9.75px;
+  width: 10.25px;
+  height: 2.5px;
   background: var(--dsw-alias-state-business-primary, #4f46e5);
 }
 
 .dsh-wsr-branch--path::after {
-  height: 2px;
   background: var(--dsw-alias-state-business-primary, #4f46e5);
 }
 
+/* A child tile is smaller than its parent's, and every level past the first
+   shrinks one more step. */
 .dsh-wsr-cell-wrap--child .dsh-wsr-cell {
-  width: 40px;
-  height: 40px;
+  width: var(--wsr-tile);
+  height: var(--wsr-tile);
   border-radius: var(--dsw-radius-sm, 7px);
 }
 
 .dsh-wsr-cell-wrap--child .dsh-wsr-cell__label {
   font-size: 9px;
+  color: color-mix(in srgb, var(--dsw-alias-label-tertiary, #8e8e8e) 82%, transparent);
 }
 
 .dsh-wsr-resize {
