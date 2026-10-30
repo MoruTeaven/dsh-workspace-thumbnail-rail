@@ -1,4 +1,4 @@
-﻿import type { ThumbnailRecord } from "./types";
+import type { ThumbnailRecord } from "./types";
 
 /**
  * Browser-side image pipeline: a user-picked file becomes a small square data
@@ -120,5 +120,5 @@ export async function makeThumbnail(file: File): Promise<ThumbnailRecord> {
     throw new ThumbnailError("图片编码失败，请换一张试试");
   }
 
-  return { src, bytes: dataUrlBytes(src), updatedAt: Date.now() };
+  return { kind: "image", src, bytes: dataUrlBytes(src), updatedAt: Date.now() };
 }

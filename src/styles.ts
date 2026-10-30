@@ -107,12 +107,22 @@ export const CSS = `
   font-weight: 500;
 }
 
+/* User-typed tiles of 3–4 glyphs drop further to stay inside the tile. */
+.dsh-wsr-cell__mono--long {
+  font-size: 11px;
+  padding: 0 2px;
+}
+
 .dsh-wsr-cell-wrap--child .dsh-wsr-cell__mono {
   font-size: 14px;
 }
 
 .dsh-wsr-cell-wrap--child .dsh-wsr-cell__mono--wide {
   font-size: 21px;
+}
+
+.dsh-wsr-cell-wrap--child .dsh-wsr-cell__mono--long {
+  font-size: 9px;
 }
 
 .dsh-wsr-cell__label {
@@ -128,6 +138,7 @@ export const CSS = `
 }
 
 .dsh-wsr-cell-wrap {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -165,13 +176,31 @@ export const CSS = `
   background: var(--dsw-alias-interactive-bg-hover, rgba(128, 128, 128, 0.16));
 }
 
+/* Icons-only mode: the fold caret rides the tile's corner, since there is no
+   title row to host it. */
+.dsh-wsr-caret--overlay {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  z-index: 2;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--dsw-alias-bg-base, #fff);
+  border: 1px solid var(--dsw-alias-border-l1, rgba(0, 0, 0, 0.1));
+  box-shadow: var(--dsw-shadow-lv1, 0 1px 4px rgba(0, 0, 0, 0.12));
+  color: var(--dsw-alias-label-secondary, #8e8e8e);
+}
+
 /*
- * Tree branch: a parent and its children share one column. Depth is shown by
- * a smaller child tile, a hairline guide, and a nesting pill whose background
- * stacks one translucent layer per level — deeper levels read as progressively
- * darker shading without any per-depth class. The rail is at most 160px wide,
- * so the pill's indent is a few pixels rather than an inset that would eat
- * the thumbnail itself.
+ * Tree branch: a parent and its children share one column. The hierarchy is
+ * drawn with real connector lines — a vertical rail per children container
+ * and a horizontal stub per child tile — plus a nesting pill whose background
+ * stacks one translucent layer per level, so deeper levels still read as
+ * progressively darker shading without any per-depth class. Connector
+ * geometry follows the --wsr-depth custom property (set by Rail.tsx), so
+ * nested levels shift left instead of overlapping; max()/calc() clamp the
+ * lines onto the tiles at the narrowest rail widths.
  */
 .dsh-wsr-branch {
   display: flex;
@@ -184,33 +213,56 @@ export const CSS = `
 
 .dsh-wsr-branch--child {
   position: relative;
-  width: calc(100% - 6px);
-  margin-left: 4px;
   padding: 3px 0;
   border-radius: var(--dsw-radius-md, 10px);
   background: var(--dsw-alias-interactive-bg-default, rgba(128, 128, 128, 0.08));
 }
 
-.dsh-wsr-cell-wrap--child {
-  position: relative;
-}
-
-.dsh-wsr-cell-wrap--child::before {
+/* Horizontal stub: from the vertical rail to this tile's left edge, at the
+   tile's midline (3px pill padding + half of the 40px tile). */
+.dsh-wsr-branch--child::after {
   content: "";
   position: absolute;
-  left: -5px;
-  top: 3px;
-  bottom: 3px;
+  top: 23px;
+  right: calc(50% + 20px);
+  height: 1px;
+  width: calc(50% - 20px - max(2px, 50% - 29px - (var(--wsr-depth, 1) - 1) * 12px));
+  border-radius: 1px;
+  background: var(--dsw-alias-border-l2, rgba(0, 0, 0, 0.16));
+}
+
+/* Children container: the vertical rail drops from the parent tile down
+   through every sibling level. */
+.dsh-wsr-branch__children {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+}
+
+.dsh-wsr-branch__children::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: max(2px, calc(50% - 29px - (var(--wsr-depth, 1) - 1) * 12px));
   width: 1px;
   border-radius: 1px;
   background: var(--dsw-alias-border-l2, rgba(0, 0, 0, 0.16));
 }
 
-/* The selected workspace's guide line and every ancestor's light up, so the
-   route from the root down to the selection is visible at a glance. */
-.dsh-wsr-cell-wrap--active.dsh-wsr-cell-wrap--child::before,
-.dsh-wsr-cell-wrap--path::before {
+/* The route from the root down to the selection: its connectors light up in
+   the accent color so the path reads at a glance. The stub thickens, the
+   rail widens — widths stay computed so the joints still meet. */
+.dsh-wsr-branch__children--path::before {
   width: 2px;
+  background: var(--dsw-alias-state-business-primary, #4f46e5);
+}
+
+.dsh-wsr-branch--path::after {
+  height: 2px;
   background: var(--dsw-alias-state-business-primary, #4f46e5);
 }
 
@@ -247,6 +299,228 @@ export const CSS = `
 
 .dsh-wsr-resize:hover::after {
   background: var(--dsw-alias-state-business-primary, #4f46e5);
+}
+
+/* ── Thumbnail picker ── */
+.dsh-wsr-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  background: rgba(0, 0, 0, 0.32);
+}
+
+.dsh-wsr-picker {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 100001;
+  width: 264px;
+  max-width: calc(100vw - 24px);
+  padding: 12px;
+  border-radius: var(--dsw-radius-lg, 12px);
+  background: var(--dsw-alias-bg-base, #fff);
+  border: 1px solid var(--dsw-alias-border-l1, rgba(0, 0, 0, 0.1));
+  box-shadow: var(--dsw-shadow-lv2, 0 8px 28px rgba(0, 0, 0, 0.18));
+  font-family: var(--dsw-font-family, inherit);
+  color: var(--dsw-alias-label-primary, #1a1a1a);
+}
+
+.dsh-wsr-picker__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 7px;
+  margin-bottom: 10px;
+}
+
+.dsh-wsr-picker__title {
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dsh-wsr-picker__close {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: var(--dsw-radius-sm, 7px);
+  background: transparent;
+  color: var(--dsw-alias-label-secondary, #8e8e8e);
+  cursor: pointer;
+}
+
+.dsh-wsr-picker__close:hover {
+  background: var(--dsw-alias-interactive-bg-hover, rgba(128, 128, 128, 0.16));
+  color: var(--dsw-alias-label-primary, #1a1a1a);
+}
+
+.dsh-wsr-picker__tabs {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: var(--dsw-radius-sm, 7px);
+  background: var(--dsw-alias-interactive-bg-default, rgba(128, 128, 128, 0.08));
+  margin-bottom: 10px;
+}
+
+.dsh-wsr-picker__tab {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 5px 0;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary, #8e8e8e);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.dsh-wsr-picker__tab--on {
+  background: var(--dsw-alias-bg-base, #fff);
+  color: var(--dsw-alias-label-primary, #1a1a1a);
+  box-shadow: var(--dsw-shadow-lv1, 0 1px 4px rgba(0, 0, 0, 0.12));
+  font-weight: 600;
+}
+
+.dsh-wsr-picker__body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dsh-wsr-picker__hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--dsw-alias-label-secondary, #8e8e8e);
+}
+
+.dsh-wsr-picker__input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border: 1px solid var(--dsw-alias-border-l1, rgba(0, 0, 0, 0.1));
+  border-radius: var(--dsw-radius-sm, 7px);
+  background: transparent;
+  color: inherit;
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+}
+
+.dsh-wsr-picker__input:focus {
+  border-color: var(--dsw-alias-state-business-primary, #4f46e5);
+}
+
+.dsh-wsr-picker__swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.dsh-wsr-picker__swatch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  color: #fff;
+}
+
+.dsh-wsr-picker__swatch--on {
+  box-shadow: 0 0 0 2px var(--dsw-alias-bg-base, #fff), 0 0 0 4px var(--dsw-alias-state-business-primary, #4f46e5);
+}
+
+.dsh-wsr-picker__swatch--custom {
+  border: 1px dashed var(--dsw-alias-border-l2, rgba(0, 0, 0, 0.16));
+  background: transparent;
+}
+
+.dsh-wsr-picker__swatch--custom input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.dsh-wsr-picker__previewrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dsh-wsr-picker__preview {
+  position: relative;
+  flex: none;
+  width: 56px;
+  height: 56px;
+  border-radius: var(--dsw-radius-md, 10px);
+  overflow: hidden;
+}
+
+.dsh-wsr-picker__save {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  flex: 1;
+  padding: 7px 0;
+  border: none;
+  border-radius: var(--dsw-radius-sm, 7px);
+  background: var(--dsw-alias-state-business-primary, #4f46e5);
+  color: #fff;
+  font-size: 12px;
+  font-family: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.dsh-wsr-picker__save:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.dsh-wsr-picker__foot {
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid var(--dsw-alias-border-l1, rgba(0, 0, 0, 0.08));
+}
+
+.dsh-wsr-picker__remove {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  padding: 5px 0;
+  border: none;
+  border-radius: var(--dsw-radius-sm, 7px);
+  background: transparent;
+  color: var(--dsw-alias-state-error-primary, #dc2626);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.dsh-wsr-picker__remove:hover {
+  background: var(--dsw-alias-interactive-bg-danger-hover, rgba(220, 38, 38, 0.1));
 }
 
 /* ── Context menu ── */
@@ -345,6 +619,13 @@ export const CSS = `
 
 /* Official sessions outside the current workspace, in the "single list" mode. */
 [data-wsr-scope-hidden="1"] {
+  display: none !important;
+}
+
+/* Official rows hidden while the rail focuses one workspace: the ancestors'
+   headers and their direct sessions. The ancestor SECTIONS stay rendered as
+   bare wrappers (the official tree nests them around the target). */
+[data-wsr-row-hidden="1"] {
   display: none !important;
 }
 `;

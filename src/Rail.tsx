@@ -1,9 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronIcon, ClockIcon, ColumnsIcon, ImageIcon, ImageOffIcon, TrashIcon } from "./icons";
+import {
+  CheckSquareIcon,
+  ChevronIcon,
+  ClockIcon,
+  ColumnsIcon,
+  ImageIcon,
+  ImageOffIcon,
+  SquareIcon,
+  TrashIcon,
+} from "./icons";
 import { ThumbnailError, makeThumbnail } from "./image";
 import { installRail, type FramePatch } from "./frame";
 import { loadPrefs, loadThumbnails, markRuntime, savePrefs, saveThumbnails } from "./storage";
-import { Monogram } from "./monogram";
+import { Monogram, TextTile } from "./monogram";
+import { ThumbnailPicker } from "./picker";
 import {
   ancestorsOf,
   buildWorkspaceTree,
@@ -82,6 +92,7 @@ export function Rail({
   const [thumbnails, setThumbnails] = useState<ThumbnailMap>(() => loadThumbnails());
   const [prefs, setPrefs] = useState(() => loadPrefs());
   const [menu, setMenu] = useState<MenuState | null>(null);
+  const [pickerId, setPickerId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [focusId, setFocusId] = useState<string | null>(null);
   const [groupBy, setGroupBy] = useState<WorkspaceGroupBy>(() => readGroupBy());
@@ -204,26 +215,35 @@ export function Rail({
   }, [workspaces, sessionsById, archivedSessionIds, openSession, notify]);
 
   /**
-   * Focus one workspace in the official browser: expand its group and HIDE
-   * every other group, so the list shows only that workspace's conversations.
+   * Focus one workspace in the official browser: show ONLY that workspace's
+   * group — its header and its own conversations — and hide everything else,
+   * including the ancestors' headers and the target's sub-groups.
    *
    * The official group container is `div[class*="groupSection"]`; the target is
    * the section whose header carries `data-row-key="workspace:<workspaceId>"`.
-   * Hiding uses a data attribute rather than a class or inline style because
+   * Hiding uses data attributes rather than a class or inline style because
    * React re-renders `className`/`style` and would drop those, while an
    * unmanaged attribute survives until the node is replaced (the observer in
    * the effect below re-applies it when that happens).
    *
    * In "Workspace Tree" the sections NEST: a parent's section wraps its
-   * children, so hiding every non-target section also hid the focused child's
-   * ancestors — and with them the child itself, which is why focusing a child
-   * Workspace left the list empty. The target and every section that contains
-   * it therefore stay visible; everything else still goes.
+   * children, so the target's ancestors must stay rendered or the target would
+   * disappear with them. Those ancestor sections are kept as bare CONTAINERS —
+   * their own header row and their direct session rows get a row-level hide
+   * attribute, which is what makes the list read as "only this workspace" even
+   * when the DOM still carries the whole ancestor chain. The target's own
+   * sub-groups are descendants of its section and are hidden whole.
    */
   const applyFocus = useCallback((workspaceId: string | null) => {
     const sections = Array.from(document.querySelectorAll<HTMLElement>('[class*="groupSection"]'));
+    const clearRows = () => {
+      for (const row of document.querySelectorAll<HTMLElement>("[data-wsr-row-hidden]")) {
+        row.removeAttribute("data-wsr-row-hidden");
+      }
+    };
     if (workspaceId === null) {
       for (const section of sections) section.removeAttribute("data-wsr-hidden");
+      clearRows();
       return;
     }
     const targetKey = `workspace:${workspaceId}`;
@@ -232,10 +252,28 @@ export function Rail({
       return header?.getAttribute("data-row-key") === targetKey;
     });
     if (target === undefined) return;
+    // Re-mark from scratch: switching from one focused workspace to another
+    // must not leave the previous ancestors' rows hidden.
+    clearRows();
     for (const section of sections) {
-      const keep = section === target || section.contains(target);
-      if (keep) section.removeAttribute("data-wsr-hidden");
-      else section.setAttribute("data-wsr-hidden", "1");
+      if (section === target) {
+        section.removeAttribute("data-wsr-hidden");
+        continue;
+      }
+      if (!section.contains(target)) {
+        section.setAttribute("data-wsr-hidden", "1");
+        continue;
+      }
+      // An ancestor: keep the container, strip its own header and its direct
+      // session rows (rows nested deeper belong to other sections).
+      section.removeAttribute("data-wsr-hidden");
+      const header = section.querySelector<HTMLElement>('[data-row-key^="workspace:"]');
+      if (header !== null) header.setAttribute("data-wsr-row-hidden", "1");
+      for (const row of section.querySelectorAll<HTMLElement>('[data-row-key^="session:"]')) {
+        if (row.closest<HTMLElement>('[class*="groupSection"]') === section) {
+          row.setAttribute("data-wsr-row-hidden", "1");
+        }
+      }
     }
   }, []);
 
@@ -401,6 +439,28 @@ export function Rail({
     });
   }, []);
 
+  /** Toggle title rows on or off, persisting the preference. */
+  const toggleIconsOnly = useCallback(() => {
+    setPrefs((current) => {
+      const next = { ...current, iconsOnly: !current.iconsOnly };
+      savePrefs(next);
+      return next;
+    });
+  }, []);
+
+  /** Persist a text tile the picker saved for one workspace. */
+  const saveTextThumbnail = useCallback((workspaceId: string, text: string, color: string) => {
+    const next: ThumbnailMap = {
+      ...loadThumbnails(),
+      [workspaceId]: { kind: "text", text, color, updatedAt: Date.now() },
+    };
+    if (saveThumbnails(next)) {
+      setThumbnails(next);
+    } else {
+      notify("缩略图保存失败：本地存储空间不足");
+    }
+  }, [notify]);
+
   /**
    * Put a show/hide toggle into the official workspace header, beside the
    * search / view-options / add actions.
@@ -508,15 +568,20 @@ export function Rail({
   /**
    * Render one rail cell, plus its children while the tree mode is on.
    *
-   * Depth is carried explicitly so every level can paint it: each child level
-   * sits on a nesting pill whose background stacks with its parent's, so
-   * depth reads as progressive shading without any per-level class, and the
-   * guide line along the CURRENT path lights up in the accent color, so the
-   * route from a root to the selected workspace stays readable at a glance.
-   * The rail is at most 160px wide, so the pill's indent is a few pixels —
-   * never an inset that would eat the thumbnail. A parent gains a caret that
-   * folds its subtree, and the fold state is persisted, so the shape survives
-   * a reload.
+   * Depth is carried explicitly so every level can paint it. Parent/child is
+   * drawn with real tree connector lines, not just a caret: each node's
+   * children sit in a `.dsh-wsr-branch__children` container whose vertical
+   * rail drops from the parent down past every sibling, and each child
+   * connects to that rail with a horizontal stub on the tile's midline. The
+   * connector positions follow the `--wsr-depth` custom property, so nested
+   * levels shift left instead of overlapping. The rail is at most 160px wide,
+   * so the geometry clamps at the left edge on the narrowest rails.
+   *
+   * The CURRENT path lights up: the selected tile gets the active highlight,
+   * every connector on the route from the root to it turns accent-colored,
+   * and ancestors get a slightly lifted title. A parent gains a caret that
+   * folds its subtree (moved onto the tile's corner in icons-only mode), and
+   * the fold state is persisted, so the shape survives a reload.
    *
    * @param workspaceId - the Workspace to draw.
    * @param depth - 0 for a root Workspace, 1+ for each level below it.
@@ -534,6 +599,10 @@ export function Rail({
     // matching where the official list files that conversation.
     const isActive = workspace.workspaceId === scopeId;
     const onPath = activePath?.has(workspace.workspaceId) ?? false;
+    // This node's children container lights up only when the node is a REAL
+    // ancestor of the selection — the selection's own subtree is not part of
+    // the route from the root to the selection.
+    const childrenOnPath = onPath && !isActive;
     const caretLabel = folded
       ? `展开 ${workspace.title} 的子工作区`
       : `收起 ${workspace.title} 的子工作区`;
@@ -541,6 +610,7 @@ export function Rail({
     const branchClass = [
       "dsh-wsr-branch",
       depth > 0 ? "dsh-wsr-branch--child" : "",
+      depth > 0 && onPath ? "dsh-wsr-branch--path" : "",
     ].filter(Boolean).join(" ");
     const wrapClass = [
       "dsh-wsr-cell-wrap",
@@ -548,6 +618,21 @@ export function Rail({
       isActive ? "dsh-wsr-cell-wrap--active" : "",
       onPath && !isActive ? "dsh-wsr-cell-wrap--path" : "",
     ].filter(Boolean).join(" ");
+    const caret = children.length > 0 && (
+      <button
+        type="button"
+        className={`dsh-wsr-caret${prefs.iconsOnly ? " dsh-wsr-caret--overlay" : ""}`}
+        aria-expanded={!folded}
+        aria-label={caretLabel}
+        title={caretLabel}
+        onClick={(event) => {
+          event.stopPropagation();
+          toggleCollapsed(workspace.workspaceId);
+        }}
+      >
+        <ChevronIcon size={9} open={!folded} />
+      </button>
+    );
 
     return (
       <div className={branchClass} key={workspace.workspaceId}>
@@ -581,29 +666,28 @@ export function Rail({
           >
             {thumb === undefined
               ? <Monogram title={workspace.title} seed={workspace.workspaceId} />
-              : <img className="dsh-wsr-cell__img" src={thumb.src} alt="" draggable={false} />}
+              : thumb.kind === "text"
+                ? <TextTile text={thumb.text} color={thumb.color} />
+                : <img className="dsh-wsr-cell__img" src={thumb.src} alt="" draggable={false} />}
           </button>
-          <div className="dsh-wsr-cell__meta">
-            {children.length > 0 && (
-              <button
-                type="button"
-                className="dsh-wsr-caret"
-                aria-expanded={!folded}
-                aria-label={caretLabel}
-                title={caretLabel}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  toggleCollapsed(workspace.workspaceId);
-                }}
-              >
-                <ChevronIcon size={9} open={!folded} />
-              </button>
+          {prefs.iconsOnly
+            ? caret
+            : (
+              <div className="dsh-wsr-cell__meta">
+                {caret}
+                <span className="dsh-wsr-cell__label">{workspace.title}</span>
+              </div>
             )}
-            <span className="dsh-wsr-cell__label">{workspace.title}</span>
-          </div>
         </div>
         {children.length > 0 && !folded
-          ? children.map((child) => renderNode(child.workspaceId, depth + 1))
+          ? (
+              <div
+                className={`dsh-wsr-branch__children${childrenOnPath ? " dsh-wsr-branch__children--path" : ""}`}
+                style={{ "--wsr-depth": depth + 1 } as React.CSSProperties}
+              >
+                {children.map((child) => renderNode(child.workspaceId, depth + 1))}
+              </div>
+            )
           : null}
       </div>
     );
@@ -637,15 +721,35 @@ export function Rail({
           menu={menu}
           hasThumbnail={thumbnails[menu.workspaceId] !== undefined}
           railVisible={prefs.enabled}
+          iconsOnly={prefs.iconsOnly}
           onClose={() => setMenu(null)}
-          onSet={() => { setMenu(null); pickFor(menu.workspaceId); }}
+          onSet={() => { setMenu(null); setPickerId(menu.workspaceId); }}
           onClear={() => { clearFor(menu.workspaceId); setMenu(null); }}
           onOpenRecent={() => { const id = menu.workspaceId; setMenu(null); openWorkspaceConversation(id); }}
           onShowAll={() => { setMenu(null); void showAllWorkspaces(); }}
           onDelete={() => { setMenu(null); void onDeleteWorkspace(menu.workspaceId); }}
           onToggleRail={() => { setMenu(null); toggleRail(); }}
+          onToggleIconsOnly={() => { setMenu(null); toggleIconsOnly(); }}
         />
       )}
+
+      {pickerId !== null && (() => {
+        const workspace = workspaceById.get(pickerId);
+        if (workspace === undefined) return null;
+        return (
+          <ThumbnailPicker
+            title={workspace.title}
+            current={thumbnails[pickerId]}
+            onClose={() => setPickerId(null)}
+            onPickImage={() => { setPickerId(null); pickFor(pickerId); }}
+            onSaveText={(text, color) => {
+              saveTextThumbnail(pickerId, text, color);
+              setPickerId(null);
+            }}
+            onRemove={() => { clearFor(pickerId); setPickerId(null); }}
+          />
+        );
+      })()}
 
       {toast !== null && <div className="dsh-wsr-toast">{toast}</div>}
     </div>
@@ -664,6 +768,8 @@ interface MenuProps {
   menu: MenuState;
   hasThumbnail: boolean;
   railVisible: boolean;
+  /** Whether title rows are currently hidden (the "icons only" mode). */
+  iconsOnly: boolean;
   onClose(): void;
   onSet(): void;
   onClear(): void;
@@ -671,13 +777,14 @@ interface MenuProps {
   onShowAll(): void;
   onDelete(): void;
   onToggleRail(): void;
+  onToggleIconsOnly(): void;
 }
 
 /** The right-click menu for one workspace cell. */
 function Menu(props: MenuProps) {
   // Keep the menu inside the viewport.
   const x = Math.max(4, Math.min(props.menu.x, window.innerWidth - 166));
-  const y = Math.max(4, Math.min(props.menu.y, window.innerHeight - 260));
+  const y = Math.max(4, Math.min(props.menu.y, window.innerHeight - 285));
   return (
     <div
       className="dsh-wsr-menu"
@@ -693,6 +800,15 @@ function Menu(props: MenuProps) {
           <ImageOffIcon size={14} /> 移除缩略图
         </button>
       )}
+      <button
+        type="button"
+        className="dsh-wsr-menu__item"
+        role="menuitem"
+        onClick={props.onToggleIconsOnly}
+      >
+        {props.iconsOnly ? <CheckSquareIcon size={14} /> : <SquareIcon size={14} />}
+        {props.iconsOnly ? "显示标题" : "只展示图标"}
+      </button>
       <div className="dsh-wsr-menu__sep" />
       <button type="button" className="dsh-wsr-menu__item" role="menuitem" onClick={props.onOpenRecent}>
         <ClockIcon size={14} /> 打开最近对话

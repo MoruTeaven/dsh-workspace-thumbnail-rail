@@ -34,12 +34,14 @@ export interface SessionListState {
 }
 
 /**
- * One stored thumbnail.
+ * A thumbnail set by the user: either a compressed image or a custom text
+ * tile ("文字" mode spells whatever the user typed on a color they picked).
  *
- * `src` is a data URL. `bytes` is the decoded payload size, kept so the storage
- * budget can be enforced without re-parsing every data URL on each write.
+ * The v1 storage shape was image-only and had no `kind`; the loader treats a
+ * missing `kind` as an image record, so old maps keep working untouched.
  */
-export interface ThumbnailRecord {
+export interface ImageThumbnailRecord {
+  kind: "image";
   /** Compressed data URL (image/webp, fallback image/jpeg or image/png). */
   src: string;
   /** Decoded byte length of `src`. */
@@ -47,6 +49,20 @@ export interface ThumbnailRecord {
   /** Epoch millis the thumbnail was set, for stable ordering by recency. */
   updatedAt: number;
 }
+
+/** A user-typed text tile: 1–4 characters on a user-picked fill. */
+export interface TextThumbnailRecord {
+  kind: "text";
+  /** The glyphs to spell, as typed (already trimmed; 1–4 characters). */
+  text: string;
+  /** A CSS color for the tile fill. */
+  color: string;
+  /** Epoch millis the thumbnail was set. */
+  updatedAt: number;
+}
+
+/** One stored thumbnail: an image or a text tile. */
+export type ThumbnailRecord = ImageThumbnailRecord | TextThumbnailRecord;
 
 /** The whole persisted map: workspace id → its thumbnail. */
 export type ThumbnailMap = Record<string, ThumbnailRecord>;
@@ -72,6 +88,13 @@ export interface RailPreferences {
    * stored set never accumulates stale "expanded" entries.
    */
   collapsed: string[];
+  /**
+   * Whether the rail shows only the tiles (no title rows).
+   *
+   * Fold carets stay — they move onto the tile's corner — so the tree keeps
+   * its fold controls without a label row to host them.
+   */
+  iconsOnly: boolean;
 }
 
 /** What a right-click menu action asks the rail to do. */

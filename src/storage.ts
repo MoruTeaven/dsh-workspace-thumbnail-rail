@@ -59,13 +59,32 @@ function writeJson(key: string, value: unknown): boolean {
   }
 }
 
-/** Reject anything that is not a usable thumbnail record, so one bad entry cannot poison the map. */
-function isThumbnailRecord(value: unknown): value is ThumbnailRecord {
-  if (typeof value !== "object" || value === null) return false;
-  const record = value as Partial<ThumbnailRecord>;
-  return typeof record.src === "string" && record.src.startsWith("data:image/")
-    && typeof record.bytes === "number" && Number.isFinite(record.bytes)
-    && typeof record.updatedAt === "number" && Number.isFinite(record.updatedAt);
+/**
+ * Validate one stored thumbnail and rebuild it as a typed record.
+ *
+ * The v1 shape was image-only with no `kind`; absence means an image. A text
+ * record must carry non-empty text and color. One bad entry is dropped rather
+ * than poisoning the whole map.
+ *
+ * @param value - the raw value read from storage.
+ * @returns the typed record, or null when the entry is unusable.
+ */
+export function normalizeThumbnail(value: unknown): ThumbnailRecord | null {
+  if (typeof value !== "object" || value === null) return null;
+  const raw = value as Record<string, unknown>;
+  if (typeof raw.updatedAt !== "number" || !Number.isFinite(raw.updatedAt)) return null;
+  if (raw.kind === "text") {
+    if (typeof raw.text === "string" && raw.text !== ""
+      && typeof raw.color === "string" && raw.color !== "") {
+      return { kind: "text", text: raw.text, color: raw.color, updatedAt: raw.updatedAt };
+    }
+    return null;
+  }
+  if (typeof raw.src === "string" && raw.src.startsWith("data:image/")
+    && typeof raw.bytes === "number" && Number.isFinite(raw.bytes)) {
+    return { kind: "image", src: raw.src, bytes: raw.bytes, updatedAt: raw.updatedAt };
+  }
+  return null;
 }
 
 /** Load the whole thumbnail map, dropping entries that do not validate. */
@@ -73,7 +92,8 @@ export function loadThumbnails(): ThumbnailMap {
   const raw = readJson<Record<string, unknown>>(THUMBNAIL_KEY, {});
   const map: ThumbnailMap = {};
   for (const [workspaceId, value] of Object.entries(raw)) {
-    if (isThumbnailRecord(value)) map[workspaceId] = value;
+    const record = normalizeThumbnail(value);
+    if (record !== null) map[workspaceId] = record;
   }
   return map;
 }
@@ -88,8 +108,8 @@ export function saveThumbnails(map: ThumbnailMap): boolean {
   return writeJson(THUMBNAIL_KEY, map);
 }
 
-/** Default preferences: a 72px rail, shown, every parent expanded. */
-export const DEFAULT_PREFS: RailPreferences = { width: 72, enabled: true, collapsed: [] };
+/** Default preferences: a 72px rail, shown, every parent expanded, titles on. */
+export const DEFAULT_PREFS: RailPreferences = { width: 72, enabled: true, collapsed: [], iconsOnly: false };
 
 /** Clamp the persisted width into a range the frame can always accommodate. */
 const MIN_WIDTH = 48;
@@ -108,6 +128,7 @@ export function loadPrefs(): RailPreferences {
     width,
     enabled: typeof raw.enabled === "boolean" ? raw.enabled : DEFAULT_PREFS.enabled,
     collapsed: [...new Set(collapsed)],
+    iconsOnly: raw.iconsOnly === true,
   };
 }
 

@@ -15,8 +15,14 @@
  * roughly the same contrast in both color schemes.
  */
 
-/** Fill colors that stay readable behind a white glyph in both themes. */
-const PALETTE = [
+/**
+ * Fill colors that stay readable behind a white glyph in both themes.
+ *
+ * Exported so the thumbnail picker offers the exact same palette the default
+ * tiles draw from — a user-picked color then never clashes with the rail's
+ * look, and the default suggestion is always one of these.
+ */
+export const PALETTE = [
   "#4f46e5", // indigo
   "#2563eb", // blue
   "#0284c7", // sky
@@ -128,6 +134,33 @@ export function Monogram({ title, seed }: MonogramProps) {
       style={{ background }}
       aria-hidden="true"
     >
+      {text}
+    </span>
+  );
+}
+
+/** Props of the user-typed text tile. */
+export interface TextTileProps {
+  /** The glyphs to spell, as typed by the user (1–4 characters). */
+  text: string;
+  /** The user-picked fill color. */
+  color: string;
+}
+
+/**
+ * A thumbnail the user typed: same tile geometry as {@link Monogram}, but the
+ * glyphs and the fill are the user's. Three or more characters drop to a
+ * smaller size so the tile never looks crammed.
+ */
+export function TextTile({ text, color }: TextTileProps) {
+  const glyphs = Array.from(text);
+  const sizeClass = glyphs.length >= 3
+    ? " dsh-wsr-cell__mono--long"
+    : glyphs.length === 1 && isWideGlyph(glyphs[0] ?? "")
+      ? " dsh-wsr-cell__mono--wide"
+      : "";
+  return (
+    <span className={`dsh-wsr-cell__mono${sizeClass}`} style={{ background: color }} aria-hidden="true">
       {text}
     </span>
   );

@@ -33,12 +33,46 @@ export const ClockIcon = (props: IconProps = {}) =>
     <polyline points="12 6 12 12 16 14" />
   </>);
 
-/** Menu item: choose a thumbnail image for this workspace. */
+/** Picker tab: set the thumbnail from an image file. */
 export const ImageIcon = (props: IconProps = {}) =>
   base(props.size ?? 14, props, <>
     <rect width="18" height="18" x="3" y="3" rx="2" />
     <circle cx="9" cy="9" r="2" />
     <path d="m21 15-3.09-3.09a2 2 0 0 0-2.82 0L6 21" />
+  </>);
+
+/** Picker tab: set the thumbnail from typed text. */
+export const TypeIcon = (props: IconProps = {}) =>
+  base(props.size ?? 14, props, <>
+    <polyline points="4 7 4 4 20 4 20 7" />
+    <line x1="9" x2="15" y1="20" y2="20" />
+    <line x1="12" x2="12" y1="4" y2="20" />
+  </>);
+
+/** Picker: close the panel without saving. */
+export const XIcon = (props: IconProps = {}) =>
+  base(props.size ?? 14, props, <>
+    <path d="M18 6 6 18" />
+    <path d="m6 6 12 12" />
+  </>);
+
+/** Menu toggle (off state): titles are currently shown. */
+export const SquareIcon = (props: IconProps = {}) =>
+  base(props.size ?? 14, props, <>
+    <rect width="18" height="18" x="3" y="3" rx="2" />
+  </>);
+
+/** Menu toggle (on state): only icons are currently shown. */
+export const CheckSquareIcon = (props: IconProps = {}) =>
+  base(props.size ?? 14, props, <>
+    <rect width="18" height="18" x="3" y="3" rx="2" />
+    <path d="m9 12 2 2 4-4" />
+  </>);
+
+/** Generic confirmation mark (swatch selection, save button). */
+export const CheckIcon = (props: IconProps = {}) =>
+  base(props.size ?? 14, props, <>
+    <path d="M20 6 9 17l-5-5" />
   </>);
 
 /** Menu item: drop this workspace's thumbnail. */
