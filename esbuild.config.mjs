@@ -22,6 +22,9 @@ const clientOptions = {
   sourcemap: false,
   logLevel: "info",
   legalComments: "none",
+  // Build stamp: the rail writes it into storage on mount, so "is the page
+  // running the build I just made?" is answerable from outside the window.
+  define: { __WSR_VERSION__: JSON.stringify(pkg.version) },
 };
 
 function wrapClient(code) {

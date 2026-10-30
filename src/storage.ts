@@ -17,6 +17,22 @@ import type { RailPreferences, ThumbnailMap, ThumbnailRecord } from "./types";
 
 const THUMBNAIL_KEY = "dsh.wsr.thumbnails.v1";
 const PREFS_KEY = "dsh.wsr.prefs.v1";
+const RUNTIME_KEY = "dsh.wsr.runtime.v1";
+
+/**
+ * Record which build is live in this page.
+ *
+ * DSH client plugins are loaded as page modules, so after rebuilding the bundle
+ * the open window keeps running the old code until it reloads. This stamp turns
+ * that invisible state into an inspectable one: "which version actually ran?"
+ * is answerable from storage alone, without opening the window (or asking the
+ * user to hover a tooltip).
+ *
+ * @param version - the build's package version.
+ */
+export function markRuntime(version: string): void {
+  writeJson(RUNTIME_KEY, { version, at: Date.now() });
+}
 
 /**
  * localStorage can be absent (SSR / tests) and can throw on access in private

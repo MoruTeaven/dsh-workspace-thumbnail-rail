@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronIcon, ColumnsIcon, FolderIcon, ImageIcon, ImageOffIcon, TrashIcon } from "./icons";
 import { ThumbnailError, makeThumbnail } from "./image";
 import { installRail, type FramePatch } from "./frame";
-import { loadPrefs, loadThumbnails, savePrefs, saveThumbnails } from "./storage";
+import { loadPrefs, loadThumbnails, markRuntime, savePrefs, saveThumbnails } from "./storage";
 import {
   ancestorsOf,
   buildWorkspaceTree,
@@ -39,6 +39,9 @@ export interface RailProps extends RailActions {
   useSessions: <T,>(selector: (state: SessionListState) => T) => T;
 }
 
+/** Build stamp injected by esbuild (`define`); see storage.markRuntime. */
+declare const __WSR_VERSION__: string;
+
 /** Rail column geometry bounds, matching the storage clamp. */
 const MIN_RAIL_WIDTH = 48;
 const MAX_RAIL_WIDTH = 160;
@@ -71,6 +74,7 @@ export function Rail({
 }: RailProps) {
   const workspaces = useWorkspaces((state) => state.items);
   const archivedSessionIds = useWorkspaces((state) => state.archivedSessionIds);
+  const recentWorkspaceId = useWorkspaces((state) => state.recentWorkspaceId);
   const currentSessionId = useSessions((state) => state.current);
   const sessionsById = useSessions((state) => state.byId);
 
@@ -119,6 +123,21 @@ export function Rail({
     () => workspaceOfSession(workspaces, currentSessionId),
     [workspaces, currentSessionId],
   );
+
+  /**
+   * The Workspace the "single list" view is scoped to.
+   *
+   * The current session is the primary answer, but a brand-new conversation is
+   * not in any Workspace's `sessionIds` yet — the official browser then still
+   * counts it as belonging to the most recent Workspace, so the rail follows
+   * that instead of silently showing every conversation again.
+   */
+  const scopeId = activeId ?? recentWorkspaceId;
+
+  /** Publish the live build so a stale page is diagnosable from outside. */
+  useEffect(() => {
+    markRuntime(__WSR_VERSION__);
+  }, []);
 
   /** Follow the official list's grouping mode (it decides the rail's shape). */
   useEffect(() => watchGroupBy(setGroupBy), []);
@@ -260,19 +279,29 @@ export function Rail({
    * whose Session belongs to another Workspace. Rows are marked with a data
    * attribute (React owns their class/style) and re-marked on each mutation,
    * because the list virtualizes and rebuilds rows as the user scrolls.
-   * Nothing is hidden while no Workspace owns the current session: an unscoped
-   * list is a better fallback than an empty one.
+   *
+   * Two guards keep the failure mode "shows too much" instead of "shows
+   * nothing": no scope is applied while no Workspace can be resolved, and a
+   * scope that would hide EVERY rendered row is dropped (a wrong scope must
+   * never leave an empty list).
    */
   useEffect(() => {
-    const scoped = groupBy === "flat" && activeId !== undefined;
+    const scoped = groupBy === "flat" && scopeId !== undefined;
+    const clear = (rows: NodeListOf<HTMLElement>) => {
+      for (const row of rows) row.removeAttribute("data-wsr-scope-hidden");
+    };
     const apply = () => {
       const rows = document.querySelectorAll<HTMLElement>('[data-row-key^="session:"]');
       if (!scoped) {
-        for (const row of rows) row.removeAttribute("data-wsr-scope-hidden");
+        clear(rows);
         return;
       }
       const ids = Array.from(rows, (row) => (row.dataset.rowKey ?? "").slice("session:".length));
-      const hidden = hiddenFlatSessionIds(owners, activeId, ids);
+      const hidden = hiddenFlatSessionIds(owners, scopeId, ids);
+      if (ids.length > 0 && hidden.size >= ids.length) {
+        clear(rows);
+        return;
+      }
       for (const row of rows) {
         const id = (row.dataset.rowKey ?? "").slice("session:".length);
         if (hidden.has(id)) row.setAttribute("data-wsr-scope-hidden", "1");
@@ -291,7 +320,7 @@ export function Rail({
     });
     observer.observe(document.body, { childList: true, subtree: true });
     return () => observer.disconnect();
-  }, [groupBy, activeId, owners]);
+  }, [groupBy, scopeId, owners]);
 
   /** Show every workspace group again. */
   const showAllWorkspaces = useCallback(() => {
@@ -482,7 +511,11 @@ export function Rail({
     const children = tree.children.get(workspace.workspaceId) ?? [];
     const folded = prefs.collapsed.includes(workspace.workspaceId);
     const thumb = thumbnails[workspace.workspaceId];
-    const isActive = workspace.workspaceId === activeId;
+    // In the flat mode the list follows `scopeId`, so the tile must highlight
+    // whatever the list is scoped to, even when that came from the recency
+    // fallback rather than from the current session.
+    const isActive = workspace.workspaceId === activeId
+      || (groupBy === "flat" && workspace.workspaceId === scopeId);
     const caretLabel = folded
       ? `展开 ${workspace.title} 的子工作区`
       : `收起 ${workspace.title} 的子工作区`;
