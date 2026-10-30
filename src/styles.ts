@@ -196,13 +196,13 @@ export const CSS = `
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 11px;
-  height: 11px;
+  width: 14px;
+  height: 14px;
   padding: 0;
   border: none;
-  border-radius: 3px;
+  border-radius: 4px;
   background: transparent;
-  color: var(--dsw-alias-label-tertiary, #8e8e8e);
+  color: var(--dsw-alias-label-secondary, #6b6b6b);
   cursor: pointer;
 }
 

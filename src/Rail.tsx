@@ -764,9 +764,13 @@ export function Rail({
         onChange={onFileChosen}
       />
 
-      {groupBy === "workspace-tree"
-        ? tree.roots.map((root) => renderNode(root.workspaceId, 0))
-        : workspaces.map((workspace) => renderNode(workspace.workspaceId, 0))}
+      {/* The rail always draws the hierarchy: the parent/child shape and its
+          fold carets are the rail's own affordance, independent of which
+          grouping mode the official list is in. Rendering the FLAT list from
+          `workspaces` here would also re-render every child twice (once under
+          its parent, once as a top-level row), so the tree projection is the
+          only source of cells. */}
+      {tree.roots.map((root) => renderNode(root.workspaceId, 0))}
 
       {prefs.enabled && workspaces.length > 0 && (
         <div

@@ -111,6 +111,6 @@ export const ColumnsIcon = (props: IconProps = {}) =>
  * the row jump: the SVG stays the same box in both states.
  */
 export const ChevronIcon = ({ open = false, ...props }: IconProps & { open?: boolean } = {}) =>
-  base(props.size ?? 9, { ...props, style: { transform: open ? "rotate(90deg)" : "none", transition: "transform 0.15s" } }, <>
+  base(props.size ?? 10, { ...props, style: { transform: open ? "rotate(90deg)" : "none", transition: "transform 0.15s" } }, <>
     <path d="m9 18 6-6-6-6" />
   </>);
