@@ -48,7 +48,7 @@ export const CSS = `
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: border-color 0.15s, background 0.15s, color 0.15s;
+  transition: border-color 0.15s, background 0.15s, color 0.15s, box-shadow 0.15s, transform 0.15s;
   flex-shrink: 0;
 }
 
@@ -69,12 +69,15 @@ export const CSS = `
   border-color: var(--dsw-alias-state-business-primary, #4f46e5);
   color: var(--dsw-alias-state-business-primary, #4f46e5);
   background: color-mix(in srgb, var(--dsw-alias-state-business-primary, #4f46e5) 14%, transparent);
-  /* A solid inner ring turns the 1px border into a fat accent outline; the
-     outer layers keep the halo + glow. */
+  /* A fat SOLID accent ring (no glow — halos read as noise on a 47px tile),
+     then a base-colored spacer that separates this ring from the run-state
+     outline drawn outside the tile. */
   box-shadow:
-    0 0 0 1.5px var(--dsw-alias-state-business-primary, #4f46e5),
-    0 0 0 4.5px color-mix(in srgb, var(--dsw-alias-state-business-primary, #4f46e5) 30%, transparent),
-    0 0 16px color-mix(in srgb, var(--dsw-alias-state-business-primary, #4f46e5) 30%, transparent);
+    0 0 0 2.5px var(--dsw-alias-state-business-primary, #4f46e5),
+    0 0 0 6px color-mix(in srgb, var(--dsw-alias-bg-base, #fff) 80%, transparent);
+  /* Scale is the one signal hover never gets: at thumbnail sizes a size
+     change is the clearest "this tile is different" cue there is. */
+  transform: scale(1.08);
 }
 
 /* A full-tile accent wash over the image/monogram keeps the selection
