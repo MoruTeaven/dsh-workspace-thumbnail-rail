@@ -69,9 +69,23 @@ export const CSS = `
   border-color: var(--dsw-alias-state-business-primary, #4f46e5);
   color: var(--dsw-alias-state-business-primary, #4f46e5);
   background: color-mix(in srgb, var(--dsw-alias-state-business-primary, #4f46e5) 14%, transparent);
+  /* A solid inner ring turns the 1px border into a fat accent outline; the
+     outer layers keep the halo + glow. */
   box-shadow:
-    0 0 0 2px color-mix(in srgb, var(--dsw-alias-state-business-primary, #4f46e5) 34%, transparent),
-    0 0 14px color-mix(in srgb, var(--dsw-alias-state-business-primary, #4f46e5) 22%, transparent);
+    0 0 0 1.5px var(--dsw-alias-state-business-primary, #4f46e5),
+    0 0 0 4.5px color-mix(in srgb, var(--dsw-alias-state-business-primary, #4f46e5) 30%, transparent),
+    0 0 16px color-mix(in srgb, var(--dsw-alias-state-business-primary, #4f46e5) 30%, transparent);
+}
+
+/* A full-tile accent wash over the image/monogram keeps the selection
+   unmistakable even when the tile is completely covered by content. */
+.dsh-wsr-cell--active::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--dsw-alias-state-business-primary, #4f46e5) 16%, transparent);
+  pointer-events: none;
 }
 
 .dsh-wsr-cell--active :is(.dsh-wsr-cell__img, .dsh-wsr-cell__mono) {
@@ -662,6 +676,14 @@ export const CSS = `
    bare wrappers (the official tree nests them around the target). */
 [data-wsr-row-hidden="1"] {
   display: none !important;
+}
+
+/* The official list's CURRENT workspace group header: a soft accent wash and
+   an accent edge, matching the rail's own selection. The title keeps its own
+   styling; the wash plus the edge are the signal. */
+[data-wsr-current="1"] {
+  background: color-mix(in srgb, var(--dsw-alias-state-business-primary, #4f46e5) 12%, transparent) !important;
+  box-shadow: inset 2.5px 0 0 var(--dsw-alias-state-business-primary, #4f46e5);
 }
 `;
 

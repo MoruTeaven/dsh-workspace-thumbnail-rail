@@ -428,6 +428,39 @@ export function Rail({
     setFocusId(null);
   }, []);
 
+  /**
+   * Light the CURRENT workspace's group header in the official list.
+   *
+   * The rail highlights its own tile, but the official list next to it gave
+   * the workspace the user is in no indication — this marks that group's
+   * header row with a data attribute (React owns class/style, the attribute
+   * survives re-renders) and re-marks it on mutations, like the focus and
+   * scope effects. Flat mode renders no workspace headers, so the mark
+   * simply lands nowhere there.
+   */
+  useEffect(() => {
+    const apply = () => {
+      for (const row of document.querySelectorAll<HTMLElement>("[data-wsr-current]")) {
+        row.removeAttribute("data-wsr-current");
+      }
+      if (scopeId === undefined) return;
+      const row = document.querySelector<HTMLElement>(`[data-row-key="workspace:${scopeId}"]`);
+      if (row !== null) row.setAttribute("data-wsr-current", "1");
+    };
+    apply();
+    let scheduled = false;
+    const observer = new MutationObserver(() => {
+      if (scheduled) return;
+      scheduled = true;
+      window.requestAnimationFrame(() => {
+        scheduled = false;
+        apply();
+      });
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [scopeId]);
+
   /** Fold or unfold one parent's children in the rail tree. */
   const toggleCollapsed = useCallback((workspaceId: string) => {
     setPrefs((current) => {
