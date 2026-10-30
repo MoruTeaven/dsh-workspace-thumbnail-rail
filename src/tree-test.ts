@@ -10,7 +10,9 @@ import { strict as assert } from "node:assert";
 import {
   ancestorsOf,
   buildWorkspaceTree,
+  computeIndentStep,
   hiddenFlatSessionIds,
+  maxTreeDepth,
   normalizePath,
   owningParentPath,
   sessionOwners,
@@ -93,6 +95,60 @@ check("buildWorkspaceTree leaves a duplicate-path twin as a root", () => {
   const tree = buildWorkspaceTree(items);
   assert.deepEqual(tree.roots.map((item) => item.workspaceId), ["first", "twin"]);
   assert.equal(tree.parentOf.size, 0);
+});
+
+check("maxTreeDepth counts levels with roots as level 1", () => {
+  assert.equal(maxTreeDepth(buildWorkspaceTree([] as Item[])), 0);
+  assert.equal(maxTreeDepth(buildWorkspaceTree([{ workspaceId: "a", path: "F:\\a" }])), 1);
+  const items: Item[] = [
+    { workspaceId: "a", path: "F:\\a" },
+    { workspaceId: "b", path: "F:\\a\\b" },
+    { workspaceId: "c", path: "F:\\a\\b\\c" },
+    { workspaceId: "d", path: "F:\\a\\d" },
+  ];
+  assert.equal(maxTreeDepth(buildWorkspaceTree(items)), 3);
+});
+
+check("computeIndentStep clamps into the readable range", () => {
+  // A wide rail with one level takes the full step.
+  assert.equal(computeIndentStep(160, 1), 15);
+  // No nesting needs no step at all; the range maximum is a safe default.
+  assert.equal(computeIndentStep(48, 0), 15);
+  // A narrow rail with deep nesting bottoms out at the minimum, never below.
+  assert.equal(computeIndentStep(48, 8), 4);
+  assert.ok(computeIndentStep(48, 3) >= 4);
+});
+
+check("computeIndentStep keeps the deepest tile inside the rail", () => {
+  // The invariant the column's overflow:hidden depends on: gutter + the
+  // deepest level's indent + its tile must not exceed the rail width. It is
+  // guaranteed for every rail width down to the deepest tree the plugin
+  // renders for, and at the minimum width for the depths users actually hit;
+  // below the 4px clamp the step stays at the clamp (a 48px rail with 6+
+  // levels simply clips, and the user can drag it wider).
+  const fits = (width: number, levels: number): boolean => {
+    const step = computeIndentStep(width, levels);
+    const gutter = Math.max(0, (width - 47) / 2);
+    const deepestTile = Math.max(24, 47 - 6 * levels);
+    return gutter + step * levels + deepestTile <= width;
+  };
+  for (const width of [72, 96, 120, 160]) {
+    for (let levels = 1; levels <= 8; levels += 1) {
+      assert.ok(fits(width, levels), `width ${width} levels ${levels} overflows`);
+    }
+  }
+  for (let levels = 1; levels <= 5; levels += 1) {
+    assert.ok(fits(48, levels), `narrow rail levels ${levels} overflows`);
+  }
+  // Deeper trees step in, never out: the step is monotone in the levels.
+  for (const width of [48, 72, 160]) {
+    let previous = computeIndentStep(width, 0);
+    for (let levels = 1; levels <= 8; levels += 1) {
+      const step = computeIndentStep(width, levels);
+      assert.ok(step <= previous, `width ${width}: step grew at level ${levels}`);
+      previous = step;
+    }
+  }
 });
 
 check("ancestorsOf lists outermost first and stops at the root", () => {

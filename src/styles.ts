@@ -257,12 +257,11 @@ export const CSS = `
  * Tree layout: one left-aligned column inside a centred gutter.
  *
  * A tree is only legible when every child sits to the RIGHT of its parent and
- * each level steps in. The rail cannot rely on per-depth classes, so the
- * indent rides the nested children containers instead: nesting accumulates it
- * naturally and the geometry stays a pure function of the level. The gutter
- * keeps a ROOT tile centred in the rail, and the indent is clamped by the
- * percentage so a wide rail steps further while the minimum 48px rail still
- * fits one level.
+ * each level steps in. The indent is a live CSS variable (--wsr-indent,
+ * written by Rail.tsx from computeIndentStep) because the column clips its
+ * overflow: a fixed indent clips the deepest tile on a narrow rail. The
+ * gutter keeps a ROOT tile centred, and every connector reads the same
+ * variables — nothing is positioned by hand, so a line cannot miss its tile.
  */
 .dsh-wsr-tree {
   display: flex;
@@ -282,9 +281,9 @@ export const CSS = `
   gap: 5px;
   flex: none;
   width: 100%;
-  /* This level's tile edge. Connectors read the same variable, so a line can
-     never miss its tile's midline however deep the level is. */
-  --wsr-tile: calc(47px - var(--wsr-depth, 0) * 6px);
+  /* This level's tile edge, shared by the tile box and the connectors. The
+     floor matches computeIndentStep's deepest-tile clamp. */
+  --wsr-tile: max(24px, calc(47px - var(--wsr-depth, 0) * 6px));
 }
 
 /*
@@ -302,9 +301,12 @@ export const CSS = `
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--dsw-alias-label-tertiary, #8e8e8e) 13%, transparent);
 }
 
-/* Children container: one indent step per level, and the vertical rail that
-   drops from the parent tile through every sibling below it. */
+/* Children container: one indent step per level (inherited --wsr-indent),
+   and the vertical rail that drops from the parent tile through every
+   sibling below it. --wsr-rail-x is the joint every elbow starts from, so
+   the rail sits at the centre of the indent at any step width. */
 .dsh-wsr-branch__children {
+  --wsr-rail-x: calc(var(--wsr-indent, 12px) / 2);
   position: relative;
   display: flex;
   flex-direction: column;
@@ -312,7 +314,7 @@ export const CSS = `
   gap: 5px;
   width: 100%;
   box-sizing: border-box;
-  padding-left: clamp(8px, 13%, 18px);
+  padding-left: var(--wsr-indent, 12px);
 }
 
 .dsh-wsr-branch__children::before {
@@ -322,31 +324,33 @@ export const CSS = `
      container's own top edge. */
   top: -5px;
   bottom: 0;
-  left: 4px;
+  left: calc(var(--wsr-rail-x) - 0.75px);
   width: 1.5px;
   border-radius: 1px;
   background: color-mix(in srgb, var(--dsw-alias-label-tertiary, #8e8e8e) 55%, transparent);
 }
 
-/* Elbow: a stub from the vertical rail to the child tile's left edge, ending
-   in a dot at the joint. Both are positioned off the branch's own left edge,
-   which is exactly one indent step inside the rail (the negative offsets). */
+/* Elbow: a stub from the rail to the child tile's left edge, on the tile's
+   midline (3px track padding + half the level's tile). The row box's left
+   edge IS the tile edge, so the elbow spans exactly indent − rail px. */
 .dsh-wsr-branch--child::before {
   content: "";
   position: absolute;
   top: calc(3px + var(--wsr-tile) / 2 - 0.75px);
-  left: -9px;
-  width: 9.5px;
+  left: calc(var(--wsr-rail-x, 6px) - var(--wsr-indent, 12px));
+  width: calc(var(--wsr-indent, 12px) - var(--wsr-rail-x, 6px) + 1px);
   height: 1.5px;
   border-radius: 1px;
   background: color-mix(in srgb, var(--dsw-alias-label-tertiary, #8e8e8e) 55%, transparent);
 }
 
+/* The joint dot, centred on the rail where the elbow starts. The branch box
+   is already (rail-x) px right of the rail's own left, hence the subtraction. */
 .dsh-wsr-branch--child::after {
   content: "";
   position: absolute;
   top: calc(3px + var(--wsr-tile) / 2 - 2.5px);
-  left: -11.5px;
+  left: calc(var(--wsr-rail-x, 6px) - var(--wsr-indent, 12px) - 2.5px);
   width: 5px;
   height: 5px;
   border-radius: 50%;
@@ -354,18 +358,14 @@ export const CSS = `
 }
 
 /* The route from the root down to the selection lights up in the accent
-   color, so the path reads at a glance. Widths stay computed so the joints
-   still meet. */
+   color, so the path reads at a glance. Only the paint changes: the geometry
+   is computed from the same variables, and widening one side of a joint
+   would open a gap at the elbow. */
 .dsh-wsr-branch__children--path::before {
-  left: 3.25px;
-  width: 2.5px;
   background: var(--dsw-alias-state-business-primary, #4f46e5);
 }
 
 .dsh-wsr-branch--path::before {
-  left: -9.75px;
-  width: 10.25px;
-  height: 2.5px;
   background: var(--dsw-alias-state-business-primary, #4f46e5);
 }
 

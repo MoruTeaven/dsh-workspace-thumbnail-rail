@@ -120,6 +120,61 @@ export function buildWorkspaceTree<T extends TreeInput>(items: readonly T[]): Wo
 }
 
 /**
+ * Deepest level reached by the projected tree (roots are level 1).
+ *
+ * The rail must fit its deepest tile inside the column: a fixed indent would
+ * push level 4+ off the right edge of a 48px rail, and the column clips
+ * overflow. Knowing the depth lets the renderer shrink the indent step until
+ * every level's tile still lands inside the rail.
+ *
+ * @param tree - the projection from {@link buildWorkspaceTree}.
+ * @returns 0 for an empty tree, 1 for roots only, and so on.
+ */
+export function maxTreeDepth<T extends TreeInput>(tree: WorkspaceTree<T>): number {
+  let deepest = 0;
+  const walk = (id: string, level: number): void => {
+    if (level > deepest) deepest = level;
+    for (const child of tree.children.get(id) ?? []) walk(child.workspaceId, level + 1);
+  };
+  for (const root of tree.roots) walk(root.workspaceId, 1);
+  return deepest;
+}
+
+/**
+ * Tile-geometry constants — MIRROR OF `styles.ts`: `.dsh-wsr-tree` centres a
+ * 47px root tile, and `.dsh-wsr-branch` sizes `--wsr-tile` to 47px minus
+ * 6px per level, floored at 24px. Change one side, change the other.
+ */
+const ROOT_TILE_PX = 47;
+const TILE_SHRINK_PX = 6;
+const MIN_TILE_PX = 24;
+
+/** The indent step range one level of the tree may take. */
+const MIN_INDENT_PX = 4;
+const MAX_INDENT_PX = 15;
+
+/**
+ * The indent one tree level gets, so the DEEPEST tile still fits the rail.
+ *
+ * A fixed indent reads well on a wide rail and clips on a narrow one: the
+ * column hides its overflow, so a level-4 tile would be cut off on a 48px
+ * rail. The step is therefore the largest that keeps the deepest row inside
+ * the column (the root tile is centred in the gutter the padding leaves),
+ * clamped so the tree still reads as a tree.
+ *
+ * @param railWidth - the live column width in px.
+ * @param levels - child levels below the roots (maxTreeDepth − 1).
+ * @returns the indent step in px for the children containers.
+ */
+export function computeIndentStep(railWidth: number, levels: number): number {
+  if (levels <= 0) return MAX_INDENT_PX;
+  const gutter = Math.max(0, (railWidth - ROOT_TILE_PX) / 2);
+  const deepestTile = Math.max(MIN_TILE_PX, ROOT_TILE_PX - TILE_SHRINK_PX * levels);
+  const fit = Math.floor((railWidth - gutter - deepestTile) / levels);
+  return Math.max(MIN_INDENT_PX, Math.min(MAX_INDENT_PX, fit));
+}
+
+/**
  * Ancestor Workspace ids of one node, outermost first.
  *
  * @param workspaceId - the node to climb from.

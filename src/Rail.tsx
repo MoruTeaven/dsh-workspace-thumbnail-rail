@@ -17,7 +17,9 @@ import { ThumbnailPicker } from "./picker";
 import {
   ancestorsOf,
   buildWorkspaceTree,
+  computeIndentStep,
   hiddenFlatSessionIds,
+  maxTreeDepth,
   sessionOwners,
 } from "./tree";
 import { readGroupBy, watchGroupBy, type WorkspaceGroupBy } from "./view-mode";
@@ -187,6 +189,15 @@ export function Rail({
   const workspaceById = useMemo(
     () => new Map(workspaces.map((workspace) => [workspace.workspaceId, workspace])),
     [workspaces],
+  );
+
+  /**
+   * The indent one tree level gets, in px, for the CURRENT rail width and
+   * tree depth — see `computeIndentStep` (tree.ts), which owns the geometry.
+   */
+  const indentStep = useMemo(
+    () => computeIndentStep(prefs.width, Math.max(0, maxTreeDepth(tree) - 1)),
+    [tree, prefs.width],
   );
 
   /** Session → owning Workspace, for scoping the official flat list. */
@@ -781,7 +792,7 @@ export function Rail({
           ? (
               <div
                 className={`dsh-wsr-branch__children${childrenOnPath ? " dsh-wsr-branch__children--path" : ""}`}
-                style={{ "--wsr-depth": depth + 1 } as React.CSSProperties}
+                style={{ "--wsr-depth": depth + 1, "--wsr-indent": `${indentStep}px` } as React.CSSProperties}
               >
                 {children.map((child) => renderNode(child.workspaceId, depth + 1))}
               </div>
