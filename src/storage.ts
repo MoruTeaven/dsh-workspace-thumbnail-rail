@@ -18,6 +18,7 @@ import type { RailPreferences, ThumbnailMap, ThumbnailRecord } from "./types";
 const THUMBNAIL_KEY = "dsh.wsr.thumbnails.v1";
 const PREFS_KEY = "dsh.wsr.prefs.v1";
 const RUNTIME_KEY = "dsh.wsr.runtime.v1";
+const DIAG_KEY = "dsh.wsr.diag.v1";
 
 /**
  * Record which build is live in this page.
@@ -32,6 +33,30 @@ const RUNTIME_KEY = "dsh.wsr.runtime.v1";
  */
 export function markRuntime(version: string): void {
   writeJson(RUNTIME_KEY, { version, at: Date.now() });
+}
+
+/**
+ * Publish the flat-list scoping state for remote diagnosis.
+ *
+ * The scoping hides rows through unmanaged DOM attributes, so a silent failure
+ * (wrong mode, no rows matched, an owner map that covers nothing) is invisible
+ * from outside the window. This snapshot keeps every input of that decision
+ * readable from storage, the same way {@link markRuntime} is.
+ *
+ * @param state - the values the scoping effect last saw.
+ */
+export function markScopeDiag(state: {
+  mode: string;
+  scoped: boolean;
+  scopeId: string | undefined;
+  activeWorkspaceId: string | undefined;
+  recentWorkspaceId: string | undefined;
+  workspaces: number;
+  owners: number;
+  rows: number;
+  hidden: number;
+}): void {
+  writeJson(DIAG_KEY, { ...state, at: Date.now() });
 }
 
 /**

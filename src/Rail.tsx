@@ -11,7 +11,7 @@ import {
 } from "./icons";
 import { ThumbnailError, makeThumbnail } from "./image";
 import { installRail, type FramePatch } from "./frame";
-import { loadPrefs, loadThumbnails, markRuntime, savePrefs, saveThumbnails } from "./storage";
+import { loadPrefs, loadThumbnails, markRuntime, markScopeDiag, savePrefs, saveThumbnails } from "./storage";
 import { Monogram, TextTile } from "./monogram";
 import { ThumbnailPicker } from "./picker";
 import {
@@ -345,32 +345,68 @@ export function Rail({
    * attribute (React owns their class/style) and re-marked on each mutation,
    * because the list virtualizes and rebuilds rows as the user scrolls.
    *
+   * The mode is read from the official store INSIDE the mutation callback, not
+   * from component state: state updates ride a poll, and a missed poll would
+   * leave the freshly-switched list unfiltered for as long as the poll lags.
+   *
    * Two guards keep the failure mode "shows too much" instead of "shows
    * nothing": no scope is applied while no Workspace can be resolved, and a
    * scope that would hide EVERY rendered row is dropped (a wrong scope must
-   * never leave an empty list).
+   * never leave an empty list). The last decision is published to storage
+   * (markScopeDiag) so a silent miss is diagnosable from outside the window.
    */
   useEffect(() => {
-    const scoped = groupBy === "flat" && scopeId !== undefined;
     const clear = (rows: NodeListOf<HTMLElement>) => {
       for (const row of rows) row.removeAttribute("data-wsr-scope-hidden");
     };
+    // The diag write rides every mutation batch; only a CHANGED decision is
+    // persisted, so a busy list does not spam storage.
+    let lastDiag = "";
     const apply = () => {
+      const mode = readGroupBy();
+      const scoped = mode === "flat" && scopeId !== undefined;
       const rows = document.querySelectorAll<HTMLElement>('[data-row-key^="session:"]');
+      const diag = {
+        mode,
+        scoped,
+        scopeId,
+        activeWorkspaceId: activeId,
+        recentWorkspaceId,
+        workspaces: workspaces.length,
+        owners: owners.size,
+        rows: rows.length,
+        hidden: 0,
+      };
       if (!scoped) {
         clear(rows);
+        const key = JSON.stringify(diag);
+        if (key !== lastDiag) {
+          lastDiag = key;
+          markScopeDiag(diag);
+        }
         return;
       }
       const ids = Array.from(rows, (row) => (row.dataset.rowKey ?? "").slice("session:".length));
       const hidden = hiddenFlatSessionIds(owners, scopeId, ids);
+      const after = { ...diag, rows: ids.length, hidden: hidden.size };
       if (ids.length > 0 && hidden.size >= ids.length) {
         clear(rows);
+        const key = JSON.stringify(after);
+        if (key !== lastDiag) {
+          lastDiag = key;
+          markScopeDiag(after);
+        }
         return;
       }
       for (const row of rows) {
         const id = (row.dataset.rowKey ?? "").slice("session:".length);
         if (hidden.has(id)) row.setAttribute("data-wsr-scope-hidden", "1");
         else row.removeAttribute("data-wsr-scope-hidden");
+      }
+      const key = JSON.stringify(after);
+      if (key !== lastDiag) {
+        lastDiag = key;
+        markScopeDiag(after);
       }
     };
     apply();
@@ -385,7 +421,7 @@ export function Rail({
     });
     observer.observe(document.body, { childList: true, subtree: true });
     return () => observer.disconnect();
-  }, [groupBy, scopeId, owners]);
+  }, [groupBy, scopeId, owners, activeId, recentWorkspaceId, workspaces.length]);
 
   /** Show every workspace group again. */
   const showAllWorkspaces = useCallback(() => {
