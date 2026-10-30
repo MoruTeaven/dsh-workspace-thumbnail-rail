@@ -60,7 +60,19 @@ export const CSS = `
 .dsh-wsr-cell--active {
   border-color: var(--dsw-alias-state-business-primary, #4f46e5);
   color: var(--dsw-alias-state-business-primary, #4f46e5);
-  background: color-mix(in srgb, var(--dsw-alias-state-business-primary, #4f46e5) 10%, transparent);
+  background: color-mix(in srgb, var(--dsw-alias-state-business-primary, #4f46e5) 14%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--dsw-alias-state-business-primary, #4f46e5) 24%, transparent);
+}
+
+/* The selected workspace's title joins the highlight. */
+.dsh-wsr-cell-wrap--active .dsh-wsr-cell__label {
+  color: var(--dsw-alias-state-business-primary, #4f46e5);
+  font-weight: 600;
+}
+
+/* Ancestors of the selection: label lifted a step (guide lit further down). */
+.dsh-wsr-cell-wrap--path .dsh-wsr-cell__label {
+  color: var(--dsw-alias-label-primary, #1a1a1a);
 }
 
 .dsh-wsr-cell__img {
@@ -68,6 +80,39 @@ export const CSS = `
   height: 100%;
   object-fit: cover;
   display: block;
+}
+
+/*
+ * Default tile when no thumbnail is set: a colored monogram of the title
+ * (two latin/digit glyphs, or one wide glyph). The fill comes from the
+ * workspace id via monogram.tsx; this block only sizes and shades it.
+ */
+.dsh-wsr-cell__mono {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1;
+  color: #fff;
+  user-select: none;
+  /* A whisper of shading keeps flat fills from reading as error blocks. */
+  background-image: linear-gradient(rgba(255, 255, 255, 0.14), rgba(0, 0, 0, 0.1));
+}
+
+.dsh-wsr-cell__mono--wide {
+  font-size: 27px;
+  font-weight: 500;
+}
+
+.dsh-wsr-cell-wrap--child .dsh-wsr-cell__mono {
+  font-size: 14px;
+}
+
+.dsh-wsr-cell-wrap--child .dsh-wsr-cell__mono--wide {
+  font-size: 21px;
 }
 
 .dsh-wsr-cell__label {
@@ -121,9 +166,12 @@ export const CSS = `
 }
 
 /*
- * Tree branch: a parent and its children share one column. Depth is shown by a
- * smaller child tile and a hairline guide, never by indentation — the rail is
- * at most 160px wide, so an inset would eat the thumbnail itself.
+ * Tree branch: a parent and its children share one column. Depth is shown by
+ * a smaller child tile, a hairline guide, and a nesting pill whose background
+ * stacks one translucent layer per level — deeper levels read as progressively
+ * darker shading without any per-depth class. The rail is at most 160px wide,
+ * so the pill's indent is a few pixels rather than an inset that would eat
+ * the thumbnail itself.
  */
 .dsh-wsr-branch {
   display: flex;
@@ -132,6 +180,15 @@ export const CSS = `
   gap: 5px;
   flex: none;
   width: 100%;
+}
+
+.dsh-wsr-branch--child {
+  position: relative;
+  width: calc(100% - 6px);
+  margin-left: 4px;
+  padding: 3px 0;
+  border-radius: var(--dsw-radius-md, 10px);
+  background: var(--dsw-alias-interactive-bg-default, rgba(128, 128, 128, 0.08));
 }
 
 .dsh-wsr-cell-wrap--child {
@@ -147,6 +204,14 @@ export const CSS = `
   width: 1px;
   border-radius: 1px;
   background: var(--dsw-alias-border-l2, rgba(0, 0, 0, 0.16));
+}
+
+/* The selected workspace's guide line and every ancestor's light up, so the
+   route from the root down to the selection is visible at a glance. */
+.dsh-wsr-cell-wrap--active.dsh-wsr-cell-wrap--child::before,
+.dsh-wsr-cell-wrap--path::before {
+  width: 2px;
+  background: var(--dsw-alias-state-business-primary, #4f46e5);
 }
 
 .dsh-wsr-cell-wrap--child .dsh-wsr-cell {

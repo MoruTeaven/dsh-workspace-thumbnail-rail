@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronIcon, ColumnsIcon, FolderIcon, ImageIcon, ImageOffIcon, TrashIcon } from "./icons";
+import { ChevronIcon, ClockIcon, ColumnsIcon, ImageIcon, ImageOffIcon, TrashIcon } from "./icons";
 import { ThumbnailError, makeThumbnail } from "./image";
 import { installRail, type FramePatch } from "./frame";
 import { loadPrefs, loadThumbnails, markRuntime, savePrefs, saveThumbnails } from "./storage";
+import { Monogram } from "./monogram";
 import {
   ancestorsOf,
   buildWorkspaceTree,
@@ -144,6 +145,17 @@ export function Rail({
 
   /** Workspace hierarchy, shared by the rail tree and the focus ancestor walk. */
   const tree = useMemo(() => buildWorkspaceTree(workspaces), [workspaces]);
+
+  /**
+   * The workspace ids on the CURRENT path: the selected workspace and every
+   * ancestor above it. The tree renderer uses this twice — the selected tile
+   * gets the active highlight, and its ancestors get a lit guide line, so the
+   * route from root to selection is readable at a glance.
+   */
+  const activePath = useMemo(() => {
+    if (scopeId === undefined) return null;
+    return new Set([...ancestorsOf(scopeId, tree.parentOf), scopeId]);
+  }, [scopeId, tree.parentOf]);
 
   /** Id lookup for the recursive renderer, so depth never rescans the list. */
   const workspaceById = useMemo(
@@ -496,36 +508,50 @@ export function Rail({
   /**
    * Render one rail cell, plus its children while the tree mode is on.
    *
-   * The rail is at most 160px wide, so depth is NOT expressed with indentation:
-   * a hairline guide and a slightly smaller tile say "child" without eating the
-   * thumbnail. A parent gains a caret that folds its subtree, and the fold state
-   * is persisted, so the shape survives a reload.
+   * Depth is carried explicitly so every level can paint it: each child level
+   * sits on a nesting pill whose background stacks with its parent's, so
+   * depth reads as progressive shading without any per-level class, and the
+   * guide line along the CURRENT path lights up in the accent color, so the
+   * route from a root to the selected workspace stays readable at a glance.
+   * The rail is at most 160px wide, so the pill's indent is a few pixels —
+   * never an inset that would eat the thumbnail. A parent gains a caret that
+   * folds its subtree, and the fold state is persisted, so the shape survives
+   * a reload.
    *
    * @param workspaceId - the Workspace to draw.
-   * @param isChild - whether this node sits below another one.
+   * @param depth - 0 for a root Workspace, 1+ for each level below it.
    * @returns the cell (with its subtree), or null if the Workspace disappeared.
    */
-  const renderNode = (workspaceId: string, isChild: boolean): React.ReactNode => {
+  const renderNode = (workspaceId: string, depth: number): React.ReactNode => {
     const workspace = workspaceById.get(workspaceId);
     if (workspace === undefined) return null;
     const children = tree.children.get(workspace.workspaceId) ?? [];
     const folded = prefs.collapsed.includes(workspace.workspaceId);
     const thumb = thumbnails[workspace.workspaceId];
-    // In the flat mode the list follows `scopeId`, so the tile must highlight
-    // whatever the list is scoped to, even when that came from the recency
-    // fallback rather than from the current session.
-    const isActive = workspace.workspaceId === activeId
-      || (groupBy === "flat" && workspace.workspaceId === scopeId);
+    // The selection follows `scopeId` in EVERY grouping mode: the current
+    // session is the primary answer, and a brand-new conversation (which is
+    // not in any Workspace's sessionIds yet) keeps the recency fallback lit,
+    // matching where the official list files that conversation.
+    const isActive = workspace.workspaceId === scopeId;
+    const onPath = activePath?.has(workspace.workspaceId) ?? false;
     const caretLabel = folded
       ? `展开 ${workspace.title} 的子工作区`
       : `收起 ${workspace.title} 的子工作区`;
 
+    const branchClass = [
+      "dsh-wsr-branch",
+      depth > 0 ? "dsh-wsr-branch--child" : "",
+    ].filter(Boolean).join(" ");
+    const wrapClass = [
+      "dsh-wsr-cell-wrap",
+      depth > 0 ? "dsh-wsr-cell-wrap--child" : "",
+      isActive ? "dsh-wsr-cell-wrap--active" : "",
+      onPath && !isActive ? "dsh-wsr-cell-wrap--path" : "",
+    ].filter(Boolean).join(" ");
+
     return (
-      <div
-        className={`dsh-wsr-branch${isChild ? " dsh-wsr-branch--child" : ""}`}
-        key={workspace.workspaceId}
-      >
-        <div className={`dsh-wsr-cell-wrap${isChild ? " dsh-wsr-cell-wrap--child" : ""}`}>
+      <div className={branchClass} key={workspace.workspaceId}>
+        <div className={wrapClass}>
           <button
             type="button"
             className={`dsh-wsr-cell${isActive ? " dsh-wsr-cell--active" : ""}`}
@@ -554,7 +580,7 @@ export function Rail({
             }}
           >
             {thumb === undefined
-              ? <FolderIcon size={18} />
+              ? <Monogram title={workspace.title} seed={workspace.workspaceId} />
               : <img className="dsh-wsr-cell__img" src={thumb.src} alt="" draggable={false} />}
           </button>
           <div className="dsh-wsr-cell__meta">
@@ -577,7 +603,7 @@ export function Rail({
           </div>
         </div>
         {children.length > 0 && !folded
-          ? children.map((child) => renderNode(child.workspaceId, true))
+          ? children.map((child) => renderNode(child.workspaceId, depth + 1))
           : null}
       </div>
     );
@@ -594,8 +620,8 @@ export function Rail({
       />
 
       {groupBy === "workspace-tree"
-        ? tree.roots.map((root) => renderNode(root.workspaceId, false))
-        : workspaces.map((workspace) => renderNode(workspace.workspaceId, false))}
+        ? tree.roots.map((root) => renderNode(root.workspaceId, 0))
+        : workspaces.map((workspace) => renderNode(workspace.workspaceId, 0))}
 
       {prefs.enabled && workspaces.length > 0 && (
         <div
@@ -669,7 +695,7 @@ function Menu(props: MenuProps) {
       )}
       <div className="dsh-wsr-menu__sep" />
       <button type="button" className="dsh-wsr-menu__item" role="menuitem" onClick={props.onOpenRecent}>
-        <FolderIcon size={14} /> 打开最近对话
+        <ClockIcon size={14} /> 打开最近对话
       </button>
       <button type="button" className="dsh-wsr-menu__item" role="menuitem" onClick={props.onShowAll}>
         <ColumnsIcon size={14} /> 显示全部工作区

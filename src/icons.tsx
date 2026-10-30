@@ -26,10 +26,11 @@ function base(size: number, props: IconProps, children: ReactNode) {
   );
 }
 
-/** Placeholder glyph shown for a workspace that has no thumbnail yet. */
-export const FolderIcon = (props: IconProps = {}) =>
-  base(props.size ?? 18, props, <>
-    <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
+/** Menu item: open the workspace's most recent conversation. */
+export const ClockIcon = (props: IconProps = {}) =>
+  base(props.size ?? 14, props, <>
+    <circle cx="12" cy="12" r="10" />
+    <polyline points="12 6 12 12 16 14" />
   </>);
 
 /** Menu item: choose a thumbnail image for this workspace. */
