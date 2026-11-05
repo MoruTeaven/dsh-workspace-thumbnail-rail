@@ -35,7 +35,7 @@ pnpm run build
 
 1. Right-click any workspace tile in the rail.
 2. Choose "设置缩略图" and pick an image, or drag an image file onto the tile.
-3. The image is centre-cropped to a 128×128 thumbnail and saved; workspaces without one show a folder icon.
+3. The image is centre-cropped to a 128×128 thumbnail and saved; a workspace without one shows a generated monogram (its title's first glyphs on a stable color).
 
 ## Development
 
@@ -51,7 +51,7 @@ npmjs.org and the Aliyun private registry are two distinct identities that never
 
 - Thumbnails are stored in the browser's local storage and never uploaded.
 - "移除此工作区" only unregisters the workspace from DSH — the directory, its files and all session logs are untouched.
-- This is a pre-release development version (`0.1.0-dev.1`); the feature set may still change.
+- This is the first stable release (`1.0.0`).
 
 ## License
 
