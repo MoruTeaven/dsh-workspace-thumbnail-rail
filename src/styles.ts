@@ -66,28 +66,28 @@ export const CSS = `
 }
 
 .dsh-wsr-cell--active {
-  border-color: var(--dsw-alias-state-business-primary, #4f46e5);
-  color: var(--dsw-alias-state-business-primary, #4f46e5);
-  background: color-mix(in srgb, var(--dsw-alias-state-business-primary, #4f46e5) 14%, transparent);
-  /* A fat SOLID accent ring, then the dark outer stroke the user asked for —
-     near-black reads hard against both themes and against any state ring. */
+  border-color: var(--dsw-alias-label-primary, #1a1a1a);
+  color: var(--dsw-alias-label-primary, #1a1a1a);
+  background: color-mix(in srgb, var(--dsw-alias-label-primary, #1a1a1a) 10%, transparent);
+  /* Neutral selection ring leaves blue, yellow and green to run status. */
   box-shadow:
-    0 0 0 2.5px var(--dsw-alias-state-business-primary, #4f46e5),
-    0 0 0 5.5px var(--dsw-static-neutral-900, #17171c);
+    0 0 0 2.5px var(--dsw-alias-label-primary, #1a1a1a),
+    0 0 0 5.5px var(--dsw-specific-sidebar-fill, var(--dsw-alias-bg-base, #fff));
   /* Scale is the one signal hover never gets: at thumbnail sizes a size
      change is the clearest "this tile is different" cue there is. */
   transform: scale(1.15);
 }
 
-/* A full-tile accent wash over the image/monogram keeps the selection
-   unmistakable even when the tile is completely covered by content. */
+/* A neutral wash over the image/monogram keeps selection visible even when
+   the tile is completely covered by content. */
 .dsh-wsr-cell--active::after {
   content: "";
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  background: color-mix(in srgb, var(--dsw-alias-state-business-primary, #4f46e5) 16%, transparent);
+  background: color-mix(in srgb, var(--dsw-alias-label-primary, #1a1a1a) 13%, transparent);
   pointer-events: none;
+  z-index: 1;
 }
 
 .dsh-wsr-cell--active :is(.dsh-wsr-cell__img, .dsh-wsr-cell__mono) {
@@ -115,10 +115,43 @@ export const CSS = `
   outline-offset: 1px;
 }
 
+/* On a selected tile the neutral selection ring occupies the border area.
+   Move the independent run-state color to a corner marker instead of stacking
+   two similarly shaped outlines (especially confusing when running is blue). */
+.dsh-wsr-cell--active:is(
+  .dsh-wsr-cell--status-running,
+  .dsh-wsr-cell--status-attention,
+  .dsh-wsr-cell--status-done
+) {
+  outline: none;
+}
+
+.dsh-wsr-cell--active:is(
+  .dsh-wsr-cell--status-running,
+  .dsh-wsr-cell--status-attention,
+  .dsh-wsr-cell--status-done
+)::before {
+  content: "";
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  z-index: 2;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1px solid var(--dsw-specific-sidebar-fill, var(--dsw-alias-bg-base, #fff));
+  background: var(--wsr-status-color);
+  pointer-events: none;
+}
+
+.dsh-wsr-cell--status-running { --wsr-status-color: var(--dsw-alias-state-info-primary, #3b82f6); }
+.dsh-wsr-cell--status-attention { --wsr-status-color: var(--dsw-alias-state-warn-primary, #d97706); }
+.dsh-wsr-cell--status-done { --wsr-status-color: var(--dsw-alias-state-success-primary, #16a34a); }
+
 /* The selected workspace's title joins the highlight. */
 .dsh-wsr-cell-wrap--active .dsh-wsr-cell__label {
-  color: var(--dsw-alias-state-business-primary, #4f46e5);
-  font-weight: 600;
+  color: var(--dsw-alias-label-primary, #1a1a1a);
+  font-weight: 700;
 }
 
 /* Ancestors of the selection: label lifted a step (guide lit further down). */
@@ -357,20 +390,12 @@ export const CSS = `
   background: color-mix(in srgb, var(--dsw-alias-label-tertiary, #8e8e8e) 75%, transparent);
 }
 
-/* The route from the root down to the selection lights up in the accent
-   color, so the path reads at a glance. Only the paint changes: the geometry
-   is computed from the same variables, and widening one side of a joint
-   would open a gap at the elbow. */
-.dsh-wsr-branch__children--path::before {
-  background: var(--dsw-alias-state-business-primary, #4f46e5);
-}
-
-.dsh-wsr-branch--path::before {
-  background: var(--dsw-alias-state-business-primary, #4f46e5);
-}
-
+/* The selected route uses the same neutral as selection. Run-state colors
+   remain reserved for the tile's outline or corner marker. */
+.dsh-wsr-branch__children--path::before,
+.dsh-wsr-branch--path::before,
 .dsh-wsr-branch--path::after {
-  background: var(--dsw-alias-state-business-primary, #4f46e5);
+  background: var(--dsw-alias-label-primary, #1a1a1a);
 }
 
 /* A child tile is smaller than its parent's, and every level past the first
@@ -739,12 +764,10 @@ export const CSS = `
   display: none !important;
 }
 
-/* The official list's CURRENT workspace group header: a soft accent wash and
-   an accent edge, matching the rail's own selection. The title keeps its own
-   styling; the wash plus the edge are the signal. */
+/* Match the rail's neutral selection without borrowing blue from run status. */
 [data-wsr-current="1"] {
-  background: color-mix(in srgb, var(--dsw-alias-state-business-primary, #4f46e5) 12%, transparent) !important;
-  box-shadow: inset 2.5px 0 0 var(--dsw-alias-state-business-primary, #4f46e5);
+  background: color-mix(in srgb, var(--dsw-alias-label-primary, #1a1a1a) 12%, transparent) !important;
+  box-shadow: inset 2.5px 0 0 var(--dsw-alias-label-primary, #1a1a1a);
 }
 `;
 
