@@ -49,8 +49,8 @@ export function markScopeDiag(state: {
   mode: string;
   scoped: boolean;
   scopeId: string | undefined;
-  activeWorkspaceId: string | undefined;
-  recentWorkspaceId: string | undefined;
+  selectedByUser: string | null | undefined;
+  currentWorkspaceId: string | undefined;
   workspaces: number;
   owners: number;
   rows: number;

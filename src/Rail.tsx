@@ -23,13 +23,13 @@ import {
   sessionOwners,
 } from "./tree";
 import { readGroupBy, watchGroupBy, type WorkspaceGroupBy } from "./view-mode";
+import { currentSessionId as currentSessionIdOf, workspaceOfSession } from "./session";
 import { runStateLabel, workspaceRunState } from "./status";
 import type {
   SessionListState,
   SessionUiStatus,
   ThumbnailMap,
   WorkspaceListState,
-  WorkspaceView,
 } from "./types";
 
 /**
@@ -75,21 +75,6 @@ const MAX_RAIL_WIDTH = 160;
 /** Milliseconds a transient message stays on screen. */
 const TOAST_MS = 2600;
 
-/**
- * Resolve which workspace owns the current session.
- *
- * The browser half has no session→workspace service; scanning the workspace
- * list is the shipped precedent
- * (runtime/src/client/workspaces/service.ts:180-182).
- */
-function workspaceOfSession(
-  workspaces: readonly WorkspaceView[],
-  sessionId: string | undefined,
-): string | undefined {
-  if (sessionId === undefined) return undefined;
-  return workspaces.find((item) => item.sessionIds.includes(sessionId))?.workspaceId;
-}
-
 /** The rail root. */
 export function Rail({
   useWorkspaces,
@@ -101,9 +86,16 @@ export function Rail({
 }: RailProps) {
   const workspaces = useWorkspaces((state) => state.items);
   const archivedSessionIds = useWorkspaces((state) => state.archivedSessionIds);
-  const recentWorkspaceId = useWorkspaces((state) => state.recentWorkspaceId);
-  const currentSessionId = useSessions((state) => state.current);
+  /**
+   * The open conversation, derived from the main view's retention.
+   *
+   * The Session snapshot carries no `current` member, so reading one yields
+   * undefined forever — which silently disabled every decision keyed on "where
+   * the user is" (the single-list scope and the active-workspace highlight).
+   * session.ts owns the derivation, and its tests pin it.
+   */
   const sessionsById = useSessions((state) => state.byId);
+  const currentSessionId = useMemo(() => currentSessionIdOf(sessionsById), [sessionsById]);
   const statusById = useSessionStatus((state) => state);
 
   const [thumbnails, setThumbnails] = useState<ThumbnailMap>(() => loadThumbnails());
@@ -112,6 +104,7 @@ export function Rail({
   const [pickerId, setPickerId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [focusId, setFocusId] = useState<string | null>(null);
+  const [showAllFlat, setShowAllFlat] = useState(false);
   const [groupBy, setGroupBy] = useState<WorkspaceGroupBy>(() => readGroupBy());
 
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -148,42 +141,46 @@ export function Rail({
     };
   }, [railWidth]);
 
+  /** The Workspace that owns the open conversation, or undefined on the home screen. */
   const activeId = useMemo(
     () => workspaceOfSession(workspaces, currentSessionId),
     [workspaces, currentSessionId],
   );
 
   /**
-   * The Workspace the "single list" view is scoped to.
+   * The Workspace the rail treats as SELECTED.
    *
-   * The current session is the primary answer, but a brand-new conversation is
-   * not in any Workspace's `sessionIds` yet — the official browser then still
-   * counts it as belonging to the most recent Workspace, so the rail follows
-   * that instead of silently showing every conversation again.
+   * An explicit pick in the rail wins; otherwise the Workspace holding the open
+   * conversation is the selection. This one value drives the tile highlight,
+   * the lit tree path, and the "In one list" filter, so all three always agree
+   * on which Workspace the user is looking at.
    */
-  const scopeId = activeId ?? recentWorkspaceId;
+  const selectionId = groupBy === "flat" && showAllFlat ? undefined : (focusId ?? activeId);
 
   /** Publish the live build so a stale page is diagnosable from outside. */
   useEffect(() => {
     markRuntime(__WSR_VERSION__);
   }, []);
 
-  /** Follow the official list's grouping mode (it decides the rail's shape). */
-  useEffect(() => watchGroupBy(setGroupBy), []);
+  /** Follow the official list's grouping mode; reset the flat-only show-all choice on mode switches. */
+  useEffect(() => watchGroupBy((mode) => {
+    setGroupBy(mode);
+    setShowAllFlat(false);
+  }), []);
 
   /** Workspace hierarchy, shared by the rail tree and the focus ancestor walk. */
   const tree = useMemo(() => buildWorkspaceTree(workspaces), [workspaces]);
 
   /**
-   * The workspace ids on the CURRENT path: the selected workspace and every
-   * ancestor above it. The tree renderer uses this twice — the selected tile
-   * gets the active highlight, and its ancestors get a lit guide line, so the
-   * route from root to selection is readable at a glance.
+   * The workspace ids on the SELECTED path: the selection and every ancestor
+   * above it. The tree renderer uses this twice — the selected tile gets the
+   * active highlight, and its ancestors get a lit guide line, so the route from
+   * root to selection is readable at a glance.
    */
   const activePath = useMemo(() => {
-    if (scopeId === undefined) return null;
-    return new Set([...ancestorsOf(scopeId, tree.parentOf), scopeId]);
-  }, [scopeId, tree.parentOf]);
+    if (selectionId === undefined) return null;
+    return new Set([...ancestorsOf(selectionId, tree.parentOf), selectionId]);
+  }, [selectionId, tree.parentOf]);
 
   /** Id lookup for the recursive renderer, so depth never rescans the list. */
   const workspaceById = useMemo(
@@ -277,10 +274,14 @@ export function Rail({
       const header = section.querySelector<HTMLElement>('[data-row-key^="workspace:"]');
       return header?.getAttribute("data-row-key") === targetKey;
     });
-    if (target === undefined) return;
-    // Re-mark from scratch: switching from one focused workspace to another
-    // must not leave the previous ancestors' rows hidden.
+    // Always re-mark from scratch: switching from one focused workspace to
+    // another (or into the flat list, which has no sections) must not leave the
+    // previous ancestors' rows hidden.
     clearRows();
+    if (target === undefined) {
+      for (const section of sections) section.removeAttribute("data-wsr-hidden");
+      return;
+    }
     for (const section of sections) {
       if (section === target) {
         section.removeAttribute("data-wsr-hidden");
@@ -349,22 +350,21 @@ export function Rail({
   }, [tree]);
 
   /**
-   * Narrow the official "In one list" view to the current Workspace.
+   * Narrow the official "In one list" view to the SELECTED Workspace.
    *
    * That grouping mode is account-wide by design, so the rail hides every row
    * whose Session belongs to another Workspace. Rows are marked with a data
    * attribute (React owns their class/style) and re-marked on each mutation,
-   * because the list virtualizes and rebuilds rows as the user scrolls.
+   * because the list rebuilds rows as the user scrolls.
    *
    * The mode is read from the official store INSIDE the mutation callback, not
    * from component state: state updates ride a poll, and a missed poll would
    * leave the freshly-switched list unfiltered for as long as the poll lags.
    *
-   * Two guards keep the failure mode "shows too much" instead of "shows
-   * nothing": no scope is applied while no Workspace can be resolved, and a
-   * scope that would hide EVERY rendered row is dropped (a wrong scope must
-   * never leave an empty list). The last decision is published to storage
-   * (markScopeDiag) so a silent miss is diagnosable from outside the window.
+   * Without a selected Workspace the list is left unchanged. An explicitly
+   * selected empty Workspace may leave no conversation rows; showing another
+   * Workspace's conversations in that case would violate the selection.
+   * The last decision is published to storage (markScopeDiag).
    */
   useEffect(() => {
     const clear = (rows: NodeListOf<HTMLElement>) => {
@@ -375,14 +375,14 @@ export function Rail({
     let lastDiag = "";
     const apply = () => {
       const mode = readGroupBy();
-      const scoped = mode === "flat" && scopeId !== undefined;
+      const scoped = mode === "flat" && selectionId !== undefined;
       const rows = document.querySelectorAll<HTMLElement>('[data-row-key^="session:"]');
       const diag = {
         mode,
         scoped,
-        scopeId,
-        activeWorkspaceId: activeId,
-        recentWorkspaceId,
+        scopeId: selectionId,
+        selectedByUser: focusId,
+        currentWorkspaceId: activeId,
         workspaces: workspaces.length,
         owners: owners.size,
         rows: rows.length,
@@ -398,17 +398,8 @@ export function Rail({
         return;
       }
       const ids = Array.from(rows, (row) => (row.dataset.rowKey ?? "").slice("session:".length));
-      const hidden = hiddenFlatSessionIds(owners, scopeId, ids);
+      const hidden = hiddenFlatSessionIds(owners, selectionId, ids, currentSessionId);
       const after = { ...diag, rows: ids.length, hidden: hidden.size };
-      if (ids.length > 0 && hidden.size >= ids.length) {
-        clear(rows);
-        const key = JSON.stringify(after);
-        if (key !== lastDiag) {
-          lastDiag = key;
-          markScopeDiag(after);
-        }
-        return;
-      }
       for (const row of rows) {
         const id = (row.dataset.rowKey ?? "").slice("session:".length);
         if (hidden.has(id)) row.setAttribute("data-wsr-scope-hidden", "1");
@@ -432,11 +423,12 @@ export function Rail({
     });
     observer.observe(document.body, { childList: true, subtree: true });
     return () => observer.disconnect();
-  }, [groupBy, scopeId, owners, activeId, recentWorkspaceId, workspaces.length]);
+  }, [groupBy, selectionId, focusId, owners, activeId, currentSessionId, workspaces.length]);
 
-  /** Show every workspace group again. */
+  /** Show every workspace group again (including the account-wide flat list). */
   const showAllWorkspaces = useCallback(() => {
     setFocusId(null);
+    setShowAllFlat(true);
   }, []);
 
   /**
@@ -448,14 +440,18 @@ export function Rail({
    * survives re-renders) and re-marks it on mutations, like the focus and
    * scope effects. Flat mode renders no workspace headers, so the mark
    * simply lands nowhere there.
+   *
+   * The mark follows the OPEN conversation (`activeId`), not the filter
+   * selection: it answers "where the user is", which stays true while the
+   * single-list view is being browsed through another Workspace's rows.
    */
   useEffect(() => {
     const apply = () => {
       for (const row of document.querySelectorAll<HTMLElement>("[data-wsr-current]")) {
         row.removeAttribute("data-wsr-current");
       }
-      if (scopeId === undefined) return;
-      const row = document.querySelector<HTMLElement>(`[data-row-key="workspace:${scopeId}"]`);
+      if (activeId === undefined) return;
+      const row = document.querySelector<HTMLElement>(`[data-row-key="workspace:${activeId}"]`);
       if (row !== null) row.setAttribute("data-wsr-current", "1");
     };
     apply();
@@ -470,7 +466,7 @@ export function Rail({
     });
     observer.observe(document.body, { childList: true, subtree: true });
     return () => observer.disconnect();
-  }, [scopeId]);
+  }, [activeId]);
 
   /** Fold or unfold one parent's children in the rail tree. */
   const toggleCollapsed = useCallback((workspaceId: string) => {
@@ -688,11 +684,12 @@ export function Rail({
     const children = tree.children.get(workspace.workspaceId) ?? [];
     const folded = prefs.collapsed.includes(workspace.workspaceId);
     const thumb = thumbnails[workspace.workspaceId];
-    // The selection follows `scopeId` in EVERY grouping mode: the current
-    // session is the primary answer, and a brand-new conversation (which is
-    // not in any Workspace's sessionIds yet) keeps the recency fallback lit,
-    // matching where the official list files that conversation.
-    const isActive = workspace.workspaceId === scopeId;
+    // The selection follows `selectionId` in EVERY grouping mode: the user's
+    // explicit pick when there is one, otherwise the Workspace holding the open
+    // conversation. The rule already behaves this way in the two grouped modes
+    // (a click focuses a section); in "In one list" it is what narrows the
+    // account-wide list down to the picked Workspace.
+    const isActive = workspace.workspaceId === selectionId;
     const onPath = activePath?.has(workspace.workspaceId) ?? false;
     // One ring color per workspace: its sessions' live status folded by the
     // official precedence (pending interaction > running > unread completion).
@@ -753,12 +750,19 @@ export function Rail({
             aria-label={cellTitle}
             aria-current={isActive || undefined}
             onClick={() => {
-              // "In one list" has no groups to focus, and the list is scoped to
-              // the current Workspace — so a click must MOVE the current
-              // Workspace instead, which is what opening its newest
-              // conversation does. Without this the click would look dead.
+              // Every grouping mode narrows the list to the picked Workspace.
+              // "In one list" has no group sections to focus, so the pick is the
+              // filter itself (the scope effect hides the other rows); the two
+              // grouped modes keep their section focus. Clicking the selection
+              // again shows everything; a new pick restores the filter.
               if (groupBy === "flat") {
-                openWorkspaceConversation(workspace.workspaceId);
+                if (!showAllFlat && selectionId === workspace.workspaceId) {
+                  setFocusId(null);
+                  setShowAllFlat(true);
+                } else {
+                  setFocusId(workspace.workspaceId);
+                  setShowAllFlat(false);
+                }
                 return;
               }
               if (focusId === workspace.workspaceId) {

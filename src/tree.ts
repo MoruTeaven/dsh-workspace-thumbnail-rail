@@ -214,28 +214,30 @@ export function sessionOwners(workspaces: readonly { workspaceId: string; sessio
 /**
  * Which session rows stay visible in the "single list" grouping mode.
  *
- * The official flat list is account-wide by design; the rail narrows it to the
- * Workspace the user is currently in, so the flat view reads like "this
- * Workspace's conversations" instead of every conversation ever made.
+ * The official flat list is account-wide by design. Rows not owned by the
+ * selected Workspace (including ungrouped conversations) must disappear.
+ * Only the currently open Session may remain visible briefly while a newly
+ * created conversation has not yet reached the Workspace projection.
  *
  * @param owners - Session → Workspace from {@link sessionOwners}.
- * @param activeWorkspaceId - the Workspace owning the current session.
+ * @param selectedWorkspaceId - the Workspace selected in the rail.
  * @param sessionIds - every row id the list currently renders.
- * @returns the ids that must be hidden (empty when nothing should be scoped).
+ * @param currentSessionId - the main-view Session, temporarily kept while unfiled.
+ * @returns the ids that must be hidden (empty when nothing is selected).
  */
 export function hiddenFlatSessionIds(
   owners: ReadonlyMap<string, string>,
-  activeWorkspaceId: string | undefined,
+  selectedWorkspaceId: string | undefined,
   sessionIds: Iterable<string>,
+  currentSessionId?: string,
 ): Set<string> {
   const hidden = new Set<string>();
-  if (activeWorkspaceId === undefined) return hidden;
+  if (selectedWorkspaceId === undefined) return hidden;
   for (const sessionId of sessionIds) {
     const owner = owners.get(sessionId);
-    // Unknown owners (a Session the Workspace projection has not listed yet)
-    // stay visible: hiding them would make a freshly created conversation
-    // vanish before the projection catches up.
-    if (owner !== undefined && owner !== activeWorkspaceId) hidden.add(sessionId);
+    if (owner !== selectedWorkspaceId && !(owner === undefined && sessionId === currentSessionId)) {
+      hidden.add(sessionId);
+    }
   }
   return hidden;
 }

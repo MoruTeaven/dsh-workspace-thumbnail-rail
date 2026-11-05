@@ -193,9 +193,22 @@ check("hiddenFlatSessionIds hides nothing without an active Workspace", () => {
   assert.equal(hiddenFlatSessionIds(owners, undefined, ["s1", "s2"]).size, 0);
 });
 
-check("hiddenFlatSessionIds keeps a row whose owner is still unknown", () => {
+check("hiddenFlatSessionIds hides unknown and ungrouped rows outside the selection", () => {
   const owners = sessionOwners([{ workspaceId: "w1", sessionIds: ["s1"] }]);
-  assert.equal(hiddenFlatSessionIds(owners, "w1", ["s1", "s-new"]).size, 0);
+  assert.deepEqual([...hiddenFlatSessionIds(owners, "w1", ["s1", "s-ungrouped"])], ["s-ungrouped"]);
+});
+
+check("hiddenFlatSessionIds temporarily retains only the current unfiled conversation", () => {
+  const owners = sessionOwners([{ workspaceId: "w1", sessionIds: ["s1"] }]);
+  assert.deepEqual(
+    [...hiddenFlatSessionIds(owners, "w1", ["s1", "s-current", "s-other"], "s-current")],
+    ["s-other"],
+  );
+});
+
+check("hiddenFlatSessionIds returns all foreign rows for an empty selection", () => {
+  const owners = sessionOwners([{ workspaceId: "w1", sessionIds: ["s1"] }]);
+  assert.deepEqual([...hiddenFlatSessionIds(owners, "w2", ["s1"])], ["s1"]);
 });
 
 console.log(`\n${passed} checks passed`);

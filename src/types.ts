@@ -18,19 +18,38 @@ export interface WorkspaceView {
   updatedAt: string;
 }
 
-/** The workspace-list projection the rail subscribes to. */
+/**
+ * The workspace-list projection the rail subscribes to.
+ *
+ * Field names mirror the shipped snapshot (dsh-client-ui-workspace reads
+ * `items` / `archivedSessionIds` / `pinnedSessionIds` from it). There is no
+ * "recent workspace" member: the list of "what the user is in" comes from the
+ * Session projection instead — see `currentSessionId` in session.ts.
+ */
 export interface WorkspaceListState {
   items: readonly WorkspaceView[];
   archivedSessionIds: readonly string[];
-  state: "idle" | "loading" | "error";
-  baselinesReady: boolean;
-  recentWorkspaceId: string | undefined;
 }
 
-/** The session-list projection the rail reads to find the current session. */
+/**
+ * The session-list projection the rail reads.
+ *
+ * The snapshot is `{ ids, byId, phase, projectionsBySession }` — there is no
+ * `current` member; the visible conversation is derived from `retainedBy`
+ * (session.ts). Subagent sessions are present in `byId` but belong to no
+ * Workspace, which the owner scan tolerates.
+ */
 export interface SessionListState {
-  current: string | undefined;
-  byId: Record<string, { id: string; updatedAt: number; blank?: boolean; running?: boolean } | undefined>;
+  byId: Record<
+    string,
+    {
+      id: string;
+      updatedAt: number;
+      blank?: boolean;
+      running?: boolean;
+      retainedBy?: Readonly<Record<string, number>>;
+    } | undefined
+  >;
 }
 
 /**

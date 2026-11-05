@@ -1,6 +1,6 @@
 {
   "name": "@moruteaven/dsh-workspace-thumbnail-rail",
-  "version": "0.1.0-dev.12",
+  "version": "0.1.0-dev.13",
   "description": "Workspace thumbnail rail for the DeepSeek Harness (DSH) — give every workspace an icon image and switch between workspaces from a vertical rail beside the workspace list.",
   "type": "module",
   "main": "lib/index.js",
@@ -30,7 +30,7 @@
     "dev": "node esbuild.config.mjs --watch",
     "prepare": "node esbuild.config.mjs",
     "typecheck": "tsc --noEmit",
-    "test:unit": "esbuild src/frame-test.ts --bundle --format=esm --platform=node --outfile=.tmp/frame-test.mjs && node .tmp/frame-test.mjs && esbuild src/tree-test.ts --bundle --format=esm --platform=node --outfile=.tmp/tree-test.mjs && node .tmp/tree-test.mjs && esbuild src/monogram-test.ts --bundle --format=esm --platform=node --outfile=.tmp/monogram-test.mjs && node .tmp/monogram-test.mjs && esbuild src/storage-test.ts --bundle --format=esm --platform=node --outfile=.tmp/storage-test.mjs && node .tmp/storage-test.mjs && esbuild src/status-test.ts --bundle --format=esm --platform=node --outfile=.tmp/status-test.mjs && node .tmp/status-test.mjs",
+    "test:unit": "esbuild src/frame-test.ts --bundle --format=esm --platform=node --outfile=.tmp/frame-test.mjs && node .tmp/frame-test.mjs && esbuild src/tree-test.ts --bundle --format=esm --platform=node --outfile=.tmp/tree-test.mjs && node .tmp/tree-test.mjs && esbuild src/monogram-test.ts --bundle --format=esm --platform=node --outfile=.tmp/monogram-test.mjs && node .tmp/monogram-test.mjs && esbuild src/storage-test.ts --bundle --format=esm --platform=node --outfile=.tmp/storage-test.mjs && node .tmp/storage-test.mjs && esbuild src/status-test.ts --bundle --format=esm --platform=node --outfile=.tmp/status-test.mjs && node .tmp/status-test.mjs && esbuild src/session-test.ts --bundle --format=esm --platform=node --outfile=.tmp/session-test.mjs && node .tmp/session-test.mjs",
     "test": "pnpm run typecheck && pnpm run test:unit",
     "npm:doctor": "node scripts/npm-publish-doctor.mjs",
     "npm:credentials:rename": "node scripts/rename-npm-credentials.mjs",
