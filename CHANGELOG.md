@@ -1,5 +1,11 @@
 # 更新日志
 
+## 未发布
+
+- 新增上架清单：列出 DSH 主流第三方插件索引源（Open Plugin Market、dsh.so、dsh-plugin-catalog 等）与各自的收录方式、提交入口
+- 新增自建 DSH 市场索引 `docs/plugin-market-index.json`，已用官方解析器校验通过
+- 优化安装说明：补充「通过 DSH 发现页安装」章节，给出索引源 URL 与添加步骤
+
 ## 1.0.0 (2026-11-05)
 
 首个正式版。

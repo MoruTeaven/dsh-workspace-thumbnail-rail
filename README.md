@@ -26,6 +26,26 @@ Give every workspace in DeepSeek Harness (DSH) a thumbnail image, and add a vert
 
 ## Install
 
+### Option 1: from the DSH Discover tab (recommended)
+
+DSH's **Plugins → Discover** tab lists installable plugins from **index sources**. Add any of these index URLs to see and one-click install this plugin:
+
+- This repo's own index (this plugin only):
+
+  ```
+  https://raw.githubusercontent.com/MoruTeaven/dsh-workspace-thumbnail-rail/master/docs/plugin-market-index.json
+  ```
+
+- Community aggregators (more plugins):
+  - **Open Plugin Market**: add its index per the [store list](https://github.com/MoruTeaven/dsh-workspace-thumbnail-rail/blob/master/docs/STORES.md)
+  - **dsh.so**: add `https://cdn.dsh.so/market/index.json`
+
+How: open the sidebar **Plugins → Experimental plugins → enable "Custom plugin markets"**, go to the **Discover** tab, click **Add index source**, paste the URL, then click **Install** on this plugin's card.
+
+### Option 2: manual
+
+Install the published npm package, or clone the repo into a DSH plugin directory and build:
+
 ```bash
 pnpm install
 pnpm run build
@@ -39,10 +59,10 @@ pnpm run build
 
 ## Development
 
-Run the publish preflight before publishing, so the registry and the credentials you hold belong to the same channel:
+Before publishing to npm, confirm the registry and your credentials belong to the same channel (the public registry uses the `@moruteaven` npmjs.org credentials):
 
 ```bash
-pnpm run npm:doctor -- --channel ALIYUN_PACKAGES
+npm whoami --registry=https://registry.npmjs.org
 ```
 
 npmjs.org and the Aliyun private registry are two distinct identities that never share credentials. Naming rules and troubleshooting: [npm credentials](https://github.com/MoruTeaven/dsh-workspace-thumbnail-rail/blob/master/docs/npm-credentials.md).

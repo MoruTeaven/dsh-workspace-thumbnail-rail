@@ -26,8 +26,27 @@
 
 ## 安装
 
+### 方式一：通过 DSH 发现页安装（推荐）
+
+DSH 的「插件 → 发现」页从**索引源**列出可安装的插件。添加下面任意一个索引源 URL 即可看到本插件并一键安装：
+
+- 本仓库自建索引（仅本插件）：
+
+  ```
+  https://raw.githubusercontent.com/MoruTeaven/dsh-workspace-thumbnail-rail/master/docs/plugin-market-index.json
+  ```
+
+- 社区聚合索引（含更多插件）：
+  - **Open Plugin Market**：按 [上架清单](https://github.com/MoruTeaven/dsh-workspace-thumbnail-rail/blob/master/docs/STORES.md) 添加其索引源
+  - **dsh.so**：添加 `https://cdn.dsh.so/market/index.json`
+
+添加方式：打开侧栏 **插件 → 实验性插件 → 开启「自定义插件市场」**，进入 **发现** 标签页，点 **添加索引源** 粘贴上面的 URL，再在本插件的卡片上点 **安装**。
+
+### 方式二：手动安装
+
+从 npm 安装已发布的包，或把仓库源码放入 DSH 插件目录后构建：
+
 ```bash
-# 在 DSH 的插件管理中安装，或手动放入插件目录
 pnpm install
 pnpm run build
 ```
@@ -40,10 +59,10 @@ pnpm run build
 
 ## 开发
 
-发布到 npm 前先跑预检，确认 registry 与凭证是同一渠道：
+发布到 npm 前先确认 registry 与凭证属于同一渠道（公开源用 npmjs.org 的 `@moruteaven` 凭证）：
 
 ```bash
-pnpm run npm:doctor -- --channel ALIYUN_PACKAGES
+npm whoami --registry=https://registry.npmjs.org
 ```
 
 两条渠道（npmjs.org 与阿里云雲效）是两套互不通用的身份，命名与排查方法见
