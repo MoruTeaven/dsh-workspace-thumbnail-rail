@@ -1,0 +1,50 @@
+{
+  "format": 1,
+  "title": {
+    "en": "MoruTeaven DSH Plugins",
+    "zh": "抹露茶柒 DSH 插件"
+  },
+  "description": {
+    "en": "Plugins for the DeepSeek Harness (DSH) published by MoruTeaven.",
+    "zh": "抹露茶柒发布的 DeepSeek Harness（DSH）插件。"
+  },
+  "metadata": {
+    "categories": {
+      "ui": { "title": { "en": "UI", "zh": "界面" } },
+      "workspace": { "title": { "en": "Workspace", "zh": "工作区" } }
+    },
+    "labels": {
+      "official": { "title": { "en": "Official", "zh": "官方" } }
+    }
+  },
+  "plugins": [
+    {
+      "name": "@moruteaven/dsh-workspace-thumbnail-rail",
+      "title": {
+        "en": "Workspace Thumbnail Rail",
+        "zh": "工作区缩略图导航栏"
+      },
+      "description": {
+        "en": "Give every workspace an icon and switch between workspaces from a vertical rail beside the workspace list.",
+        "zh": "为每个工作区设置图标，并在工作区列表旁以竖向导航栏快速切换工作区。"
+      },
+      "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMjggMTI4IiB3aWR0aD0iMTI4IiBoZWlnaHQ9IjEyOCIgcm9sZT0iaW1nIiBhcmlhLWxhYmVsPSJEU0ggV29ya3NwYWNlIFRodW1ibmFpbCBSYWlsIj4KICA8ZGVmcz4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0iYmciIHgxPSIwIiB5MT0iMCIgeDI9IjEiIHkyPSIxIj4KICAgICAgPHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSIjNmY1YmZmIi8+CiAgICAgIDxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzNiODJmNiIvPgogICAgPC9saW5lYXJHcmFkaWVudD4KICA8L2RlZnM+CiAgPHJlY3QgeD0iNiIgeT0iNiIgd2lkdGg9IjExNiIgaGVpZ2h0PSIxMTYiIHJ4PSIyNiIgZmlsbD0idXJsKCNiZykiLz4KICA8ZyBmaWxsPSIjZmZmZmZmIiBmaWxsLW9wYWNpdHk9IjAuOTUiPgogICAgPCEtLSB2ZXJ0aWNhbCByYWlsIC0tPgogICAgPHJlY3QgeD0iMjYiIHk9IjMwIiB3aWR0aD0iMjAiIGhlaWdodD0iNjgiIHJ4PSI3Ii8+CiAgICA8IS0tIGEgd29ya3NwYWNlIHRpbGUgb24gdGhlIHJhaWwgLS0+CiAgICA8cmVjdCB4PSIzNCIgeT0iMzgiIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiIgcng9IjUiIGZpbGw9IiNmZmZmZmYiLz4KICAgIDxjaXJjbGUgY3g9IjQyIiBjeT0iNDYiIHI9IjMuMiIgZmlsbD0idXJsKCNiZykiLz4KICAgIDwhLS0gc2lkZWJhciAvIGNvbnZlcnNhdGlvbiBwYW5lIC0tPgogICAgPHJlY3QgeD0iNTYiIHk9IjMwIiB3aWR0aD0iNDYiIGhlaWdodD0iNjgiIHJ4PSI5IiBmaWxsPSIjZmZmZmZmIiBmaWxsLW9wYWNpdHk9IjAuODUiLz4KICAgIDxyZWN0IHg9IjY2IiB5PSI0NCIgd2lkdGg9IjI2IiBoZWlnaHQ9IjYiIHJ4PSIzIiBmaWxsPSJ1cmwoI2JnKSIvPgogICAgPHJlY3QgeD0iNjYiIHk9IjU4IiB3aWR0aD0iMjYiIGhlaWdodD0iNiIgcng9IjMiIGZpbGw9InVybCgjYmcpIiBmaWxsLW9wYWNpdHk9IjAuNyIvPgogICAgPHJlY3QgeD0iNjYiIHk9IjcyIiB3aWR0aD0iMTgiIGhlaWdodD0iNiIgcng9IjMiIGZpbGw9InVybCgjYmcpIiBmaWxsLW9wYWNpdHk9IjAuNSIvPgogIDwvZz4KPC9zdmc+Cg==",
+      "homepage": "https://github.com/MoruTeaven/dsh-workspace-thumbnail-rail#readme",
+      "repository": {
+        "url": "https://github.com/MoruTeaven/dsh-workspace-thumbnail-rail.git"
+      },
+      "category": "workspace",
+      "labels": ["official"],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "publishTimestamp": 1772857591,
+          "source": {
+            "type": "npm",
+            "registry": "https://registry.npmjs.org"
+          }
+        }
+      ]
+    }
+  ]
+}
